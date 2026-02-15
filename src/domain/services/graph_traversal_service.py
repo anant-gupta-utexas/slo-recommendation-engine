@@ -33,18 +33,18 @@ class GraphTraversalService:
         self,
         service_id: UUID,
         direction: TraversalDirection,
+        repository: "DependencyRepositoryInterface",
         max_depth: int = 3,
         include_stale: bool = False,
-        repository: "DependencyRepositoryInterface",
     ) -> tuple[list["Service"], list["ServiceDependency"]]:
         """Retrieve subgraph starting from service_id.
 
         Args:
             service_id: Starting point for traversal
             direction: Which edges to follow
+            repository: Dependency repository for data access
             max_depth: Maximum traversal depth (default 3, max 10)
             include_stale: Whether to include stale edges
-            repository: Dependency repository for data access
 
         Returns:
             Tuple of (nodes, edges) in the subgraph
