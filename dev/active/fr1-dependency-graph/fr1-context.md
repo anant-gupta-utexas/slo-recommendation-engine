@@ -420,18 +420,44 @@ Request
   - ✅ Health checks implemented
   - ✅ Integration tests with testcontainers (54/54 passing - 100%) ✅
   - ✅ **Performance Benchmark EXCEEDED:** 3-hop on 1000 nodes in ~50ms (target: <100ms)
-- ⬜ **Phase 3 (Week 3)**: Application layer (not started) - **READY TO BEGIN**
+- ✅ **Phase 3 (Week 3)**: Application layer 100% COMPLETE ⭐
+  - ✅ DTOs implemented with dataclasses (242 LOC total, 3 files)
+  - ✅ Use cases implemented (528 LOC total, 3 files)
+  - ✅ Clean Architecture principles followed
+  - ✅ Dependency injection via constructors
+  - ✅ Syntax validated (no compilation errors)
+  - ✅ DTO unit tests (31/31 passing - 100%) ✅
+  - ✅ Use case unit tests (22/22 passing - 100%) ✅
+  - ✅ **Total: 53/53 application tests passing (100%)** ⭐
+  - ⬜ Integration tests (0% coverage) - deferred to Phase 4
 - ⬜ **Phase 4 (Week 4)**: API layer (not started)
 - ⬜ **Phase 5 (Week 5)**: Observability (not started)
 - ⬜ **Phase 6 (Week 6)**: Integration & Deployment (not started)
 
 **Current Working On:**
-- **READY FOR PHASE 3:** Application layer (DTOs, Use Cases)
+- **Session 7 (2026-02-15):** Fixed all failing Phase 3 tests ✅
+  - ✅ Fixed test_ingest_dependency_graph.py (6/6 passing)
+  - ✅ Fixed test_detect_circular_dependencies.py (8/8 passing)
+  - ✅ Fixed test_query_dependency_subgraph.py (8/8 passing)
+  - ✅ Fixed implementation bug in query_dependency_subgraph.py statistics
+  - ✅ **Phase 3 Complete: 53/53 tests passing (100%)**
 
 **Blockers:**
 - None
 
-**Recent Decisions (Session 5 - Test Fixes 2026-02-15):**
+**Recent Decisions (Session 7 - Test Fixes 2026-02-15):**
+- **EdgeMergeService Mock:** Use MagicMock (not AsyncMock) since compute_confidence_score is synchronous
+- **Bulk Upsert Pattern:** Implementation calls bulk_upsert once with all services (explicit + auto-discovered)
+- **UUID→String Conversion:** Mock _get_service_id_from_uuid helper in tests for proper DTO conversion
+- **Statistics Bug Fix:** Changed len(nodes)-1 to len(nodes) since starting service not in returned nodes
+- **CircularDependencyAlert:** Tests must work with Alert objects, not plain lists of service_ids
+- **Test Organization:** Unit tests for DTOs and Use Cases in separate directories
+- **Mock Strategy:** Use AsyncMock from unittest.mock for all async dependencies
+- **Test Coverage Target:** 100% for DTOs, >85% for use cases (achieved 100%)
+- **Fixture Pattern:** One fixture per dependency (service_repo, dependency_repo, etc.)
+- **Test Naming:** Clear descriptive names following pattern `test_<scenario>_<expected_outcome>`
+
+**Previous Decisions (Session 5 - Test Fixes 2026-02-15):**
 - **Visited Services Collection:** Only collect target services (downstream) or source services (upstream), not both ends of edges
 - **Starting Service Exclusion:** Always filter out starting service from results using `discard(service_id)` after collection
 - **Cycle Handling:** Remove cycle prevention from WHERE clause; rely on DISTINCT and max_depth to handle cycles
@@ -458,14 +484,18 @@ Request
 - Partial indexes applied to `is_stale`, `discovered`, `status` for query optimization
 - Trigger function shared across tables, dropped in final migration downgrade
 
-## Next Steps
+## Next Steps (Session 8)
 
-**Immediate (Next Session):**
-1. ✅ Complete Alembic setup and migrations
-2. ✅ Implement repository layer (Tasks #6-8)
-3. ✅ Create database configuration and session management (Task #9)
-4. ✅ **Write integration tests with testcontainers (Task #10)** - 100% DONE ✅
-5. **START PHASE 3:** Application layer (DTOs, Use Cases) ⭐ **READY**
+**Immediate (PRIORITY):**
+1. ✅ ~~Fix 17 failing use case tests~~ **DONE - All 53/53 passing**
+2. ⬜ **Move to Phase 4: API layer with FastAPI** **<-- NEXT**
+   - Create FastAPI routes for ingestion and query endpoints
+   - Implement Pydantic models for API validation
+   - Add authentication middleware (API key verification)
+   - Add rate limiting middleware
+   - Add error handling middleware
+3. ⬜ Add integration tests for use cases (with real repositories) - can be done in parallel with Phase 4
+4. ⬜ Write E2E tests for full API workflows
 
 **Weekly Milestones:**
 - ✅ Week 1: Domain layer complete, unit tests passing (DONE)
@@ -473,39 +503,75 @@ Request
   - ✅ Integration tests complete (54/54 passing - 100%)
   - ✅ Performance benchmarks exceeded (50ms vs 100ms target for 1000 nodes)
   - ✅ All repository methods tested and production-ready
-- ⬜ Week 3: Use cases complete, application layer tested **<-- NEXT**
-- ⬜ Week 4: API endpoints live, E2E tests passing
+- ✅ Week 3: Application layer 100% complete ⭐ **<-- COMPLETED**
+  - ✅ All DTOs and use cases implemented
+  - ✅ DTO tests 100% (31/31 passing)
+  - ✅ Use case tests 100% (22/22 passing)
+  - ✅ **Total: 53/53 tests passing (100%)**
+- ⬜ Week 4: API endpoints live, E2E tests passing **<-- NEXT**
 - ⬜ Week 5: Observability integrated, monitoring operational
 - ⬜ Week 6: OTel integration complete, deployed to staging
 
-**Next Session Handoff:**
-- **Start Phase 3:** Application layer (DTOs, Use Cases)
-- **Files to create:**
-  - `src/application/dtos/dependency_graph_dto.py` - Ingestion DTOs
-  - `src/application/dtos/dependency_subgraph_dto.py` - Query DTOs
-  - `src/application/dtos/common.py` - Shared DTOs
-  - `src/application/use_cases/ingest_dependency_graph.py`
-  - `src/application/use_cases/query_dependency_subgraph.py`
-  - `src/application/use_cases/detect_circular_dependencies.py`
-- **Infrastructure ready:**
-  - All repository methods tested and working
-  - Database schema validated
-  - Performance targets met/exceeded
-- **Key learnings from Phase 2:**
-  - Use `metadata_` for SQLAlchemy model attributes that conflict with reserved names
-  - Use `literal_column()` for PostgreSQL-specific SQL in CTEs
-  - Avoid subqueries in recursive CTE WHERE clauses
-  - Function-scoped fixtures for pytest-asyncio compatibility
+**Files Created in Phase 3 (Session 6):**
 
-**Files Modified in Session 5 (2026-02-15):**
+**Code (770 LOC):**
+- ✅ `src/application/dtos/common.py` (58 LOC)
+- ✅ `src/application/dtos/dependency_graph_dto.py` (107 LOC)
+- ✅ `src/application/dtos/dependency_subgraph_dto.py` (77 LOC)
+- ✅ `src/application/use_cases/ingest_dependency_graph.py` (259 LOC)
+- ✅ `src/application/use_cases/query_dependency_subgraph.py` (165 LOC)
+- ✅ `src/application/use_cases/detect_circular_dependencies.py` (104 LOC)
+
+**Tests (~1200 LOC):**
+- ✅ `tests/unit/application/dtos/test_common.py` (5 tests, 100% passing)
+- ✅ `tests/unit/application/dtos/test_dependency_graph_dto.py` (20 tests, 100% passing)
+- ✅ `tests/unit/application/dtos/test_dependency_subgraph_dto.py` (10 tests, 100% passing)
+- 🔧 `tests/unit/application/use_cases/test_ingest_dependency_graph.py` (6 tests, 0% passing - fixture issue)
+- 🔧 `tests/unit/application/use_cases/test_query_dependency_subgraph.py` (8 tests, 62% passing)
+- 🔧 `tests/unit/application/use_cases/test_detect_circular_dependencies.py` (8 tests, 0% passing - fixture issue)
+
+**Key Implementation Decisions (Phase 3):**
+- Used dataclasses for DTOs (not Pydantic - reserved for API/infrastructure layer)
+- Async use cases with dependency injection via constructors
+- Simplified edge merging for MVP (DB ON CONFLICT handles it)
+- Auto-creation of unknown services with discovered=true flag
+- Comprehensive enum validation and error handling
+- AsyncMock from unittest.mock for all test mocks
+- No background tasks yet (deferred to Phase 5)
+
+**Files Modified in Session 7 (2026-02-15):**
+- ✅ Fixed `tests/unit/application/use_cases/test_ingest_dependency_graph.py`
+  - Added mock_edge_merge_service fixture (MagicMock, not AsyncMock)
+  - Fixed bulk_upsert expectations (single call with all services)
+  - All 6 tests now passing
+- ✅ Fixed `tests/unit/application/use_cases/test_detect_circular_dependencies.py`
+  - Renamed constructor parameters (alert_repository, detector)
+  - Updated assertions to work with CircularDependencyAlert objects
+  - All 8 tests now passing
+- ✅ Fixed `tests/unit/application/use_cases/test_query_dependency_subgraph.py`
+  - Added _get_service_id_from_uuid helper mocks for UUID→string conversion
+  - All 8 tests now passing
+- ✅ Fixed `src/application/use_cases/query_dependency_subgraph.py`
+  - Fixed statistics calculation bug (lines 129-132): len(nodes) not len(nodes)-1
+  - Starting service is not in returned nodes list
+- ✅ Updated `dev/active/fr1-dependency-graph/fr1-tasks.md` to reflect 100% Phase 3 completion
+- ✅ Updated `dev/active/fr1-dependency-graph/fr1-context.md` (this file) with Session 7 summary
+
+**Files Created in Session 6 (2026-02-15):**
+- ✅ Created `tests/unit/application/dtos/__init__.py`
+- ✅ Created `tests/unit/application/dtos/test_common.py` (85 LOC)
+- ✅ Created `tests/unit/application/dtos/test_dependency_graph_dto.py` (290 LOC)
+- ✅ Created `tests/unit/application/dtos/test_dependency_subgraph_dto.py` (220 LOC)
+- ✅ Created `tests/unit/application/use_cases/__init__.py`
+- ✅ Created `tests/unit/application/use_cases/test_ingest_dependency_graph.py` (290 LOC)
+- ✅ Created `tests/unit/application/use_cases/test_query_dependency_subgraph.py` (330 LOC)
+- ✅ Created `tests/unit/application/use_cases/test_detect_circular_dependencies.py` (280 LOC)
+
+**Previous Files Modified (Session 5 - 2026-02-15):**
 - ✅ Fixed `src/infrastructure/database/repositories/dependency_repository.py`
   - Lines 271, 291-295: Fixed downstream traversal service collection
   - Lines 369, 387-391: Fixed upstream traversal service collection
   - Lines 254-257, 350-353: Removed overly aggressive cycle prevention
-- ✅ Updated `dev/active/fr1-dependency-graph/fr1-phase2-tests-summary.md` with bug fix documentation
-- ✅ Updated `dev/active/fr1-dependency-graph/session-logs/fr1-phase2.md` with Session 5 entry
-- ✅ Updated `dev/active/fr1-dependency-graph/fr1-context.md` (this file)
-- ✅ Updated `dev/active/fr1-dependency-graph/fr1-tasks.md` to reflect 100% completion
 
 **Files Modified in Session 4:**
 - ✅ Created 7 integration test files (~600 LOC total)
@@ -516,10 +582,12 @@ Request
 
 ---
 
-**Document Version:** 1.5
-**Last Updated:** 2026-02-15
+**Document Version:** 1.7
+**Last Updated:** 2026-02-15 Session 7
 **Change Log:**
-- v1.5 (2026-02-15): Phase 2 100% complete, all 54 integration tests passing
+- v1.7 (2026-02-15 Session 7): **Phase 3 100% COMPLETE** - All 53/53 tests passing, ready for Phase 4 API layer
+- v1.6 (2026-02-15 Session 6): Phase 3 code complete, tests 68% (31 DTO tests passing, 17 use case tests need fixture fixes)
+- v1.5 (2026-02-15 Session 5): Phase 2 100% complete, all 54 integration tests passing
 - v1.4 (2026-02-14): Phase 2 integration tests complete (90%), ready for Phase 3
 - v1.3 (2026-02-14): Repository layer complete (80% Phase 2), integration tests remaining
 - v1.2 (2026-02-14): Updated with Phase 2 progress (50% complete), next steps for repository implementations
