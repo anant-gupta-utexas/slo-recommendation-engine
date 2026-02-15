@@ -19,5 +19,8 @@ COPY . .
 # Activate virtual environment and set as default
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Default command
-CMD ["python", "main.py"]
+# Expose API port
+EXPOSE 8000
+
+# Default command (can be overridden in docker-compose)
+CMD ["uvicorn", "src.infrastructure.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
