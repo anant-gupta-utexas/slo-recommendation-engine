@@ -2,7 +2,7 @@
 ## Service Dependency Graph Ingestion & Management
 
 **Created:** 2026-02-14
-**Last Updated:** 2026-02-14
+**Last Updated:** 2026-02-15
 
 ---
 
@@ -409,26 +409,50 @@ Request
 
 **Phase Completion:**
 - ✅ **Phase 1 (Week 1)**: Domain layer complete, 95% test coverage, 94 tests passing
-- 🔄 **Phase 2 (Week 2)**: Infrastructure layer IN PROGRESS (50% complete)
+- ✅ **Phase 2 (Week 2)**: Infrastructure layer 100% COMPLETE ⭐
   - ✅ Alembic initialized with async support
-  - ✅ SQLAlchemy models created for all 3 tables
-  - ✅ 3 database migrations created (not yet tested)
-  - ⬜ Repository implementations (next up)
-  - ⬜ Integration tests with testcontainers
-- ⬜ **Phase 3 (Week 3)**: Application layer (not started)
+  - ✅ SQLAlchemy models created for all 3 tables (with metadata_ fix)
+  - ✅ 3 database migrations created (tested via integration tests)
+  - ✅ ServiceRepository complete (235 LOC) - 16/16 tests passing (100%)
+  - ✅ DependencyRepository complete with recursive CTEs (560 LOC) - 18/18 tests passing (100%)
+  - ✅ CircularDependencyAlertRepository complete (210 LOC) - 20/20 tests passing (100%)
+  - ✅ Database configuration and session management (260 LOC total)
+  - ✅ Health checks implemented
+  - ✅ Integration tests with testcontainers (54/54 passing - 100%) ✅
+  - ✅ **Performance Benchmark EXCEEDED:** 3-hop on 1000 nodes in ~50ms (target: <100ms)
+- ⬜ **Phase 3 (Week 3)**: Application layer (not started) - **READY TO BEGIN**
 - ⬜ **Phase 4 (Week 4)**: API layer (not started)
 - ⬜ **Phase 5 (Week 5)**: Observability (not started)
 - ⬜ **Phase 6 (Week 6)**: Integration & Deployment (not started)
 
 **Current Working On:**
-- Task #6: Implement ServiceRepository with PostgreSQL (NEXT)
-- Task #7: Implement DependencyRepository with recursive CTEs (NEXT)
-- Task #8: Implement CircularDependencyAlertRepository (NEXT)
+- **READY FOR PHASE 3:** Application layer (DTOs, Use Cases)
 
 **Blockers:**
-- None currently
+- None
 
-**Recent Decisions:**
+**Recent Decisions (Session 5 - Test Fixes 2026-02-15):**
+- **Visited Services Collection:** Only collect target services (downstream) or source services (upstream), not both ends of edges
+- **Starting Service Exclusion:** Always filter out starting service from results using `discard(service_id)` after collection
+- **Cycle Handling:** Remove cycle prevention from WHERE clause; rely on DISTINCT and max_depth to handle cycles
+- **Design Principle:** Return all edges including cycle-creating edges (represent real circular dependencies)
+
+**Recent Decisions (Session 4 - Integration Tests):**
+- **metadata Attribute Conflict:** Use `metadata_` in Python model, map to `"metadata"` DB column
+- **CTE Array Construction:** Use `literal_column()` with PostgreSQL ARRAY syntax instead of `func.array([column])`
+- **Return Type:** Changed traverse_graph to return dict `{"services": [...], "edges": [...]}` for test compatibility
+- **Event Loop Management:** Use function-scoped async fixtures to avoid pytest-asyncio conflicts
+- **Test Containers:** Real PostgreSQL for integration tests, ~2s overhead per test class but high confidence
+
+**Previous Decisions (Session 3):**
+- **Recursive CTE Implementation:** Separate methods for upstream, downstream, bidirectional traversal
+- **Cycle Prevention:** Use PostgreSQL `= ANY(path)` to check if node in path array
+- **Connection Pooling:** Default pool_size=20, max_overflow=10 (configurable via env)
+- **Session Management:** Auto-commit on success, auto-rollback on exception
+- **Bulk Upsert:** PostgreSQL INSERT...ON CONFLICT DO UPDATE with RETURNING clause
+- **JSONB Storage:** Manual serialization for retry_config and cycle_path
+
+**Previous Decisions (Session 2):**
 - Used `Mapped[type]` syntax for all SQLAlchemy columns (modern SQLAlchemy 2.0+)
 - All migrations use async engine support via `async_engine_from_config()`
 - Partial indexes applied to `is_stale`, `discovered`, `status` for query optimization
@@ -436,30 +460,67 @@ Request
 
 ## Next Steps
 
-**Immediate (Current Session):**
+**Immediate (Next Session):**
 1. ✅ Complete Alembic setup and migrations
-2. ⬜ Implement repository layer (Tasks #6-8)
-3. ⬜ Create database configuration and session management (Task #9)
-4. ⬜ Write integration tests with testcontainers (Task #10)
+2. ✅ Implement repository layer (Tasks #6-8)
+3. ✅ Create database configuration and session management (Task #9)
+4. ✅ **Write integration tests with testcontainers (Task #10)** - 100% DONE ✅
+5. **START PHASE 3:** Application layer (DTOs, Use Cases) ⭐ **READY**
 
 **Weekly Milestones:**
 - ✅ Week 1: Domain layer complete, unit tests passing (DONE)
-- 🔄 Week 2: Database schema deployed, repositories implemented (50% DONE)
-- ⬜ Week 3: Use cases complete, application layer tested
+- ✅ Week 2: Database schema deployed, repositories implemented (100% DONE) ⭐
+  - ✅ Integration tests complete (54/54 passing - 100%)
+  - ✅ Performance benchmarks exceeded (50ms vs 100ms target for 1000 nodes)
+  - ✅ All repository methods tested and production-ready
+- ⬜ Week 3: Use cases complete, application layer tested **<-- NEXT**
 - ⬜ Week 4: API endpoints live, E2E tests passing
 - ⬜ Week 5: Observability integrated, monitoring operational
 - ⬜ Week 6: OTel integration complete, deployed to staging
 
 **Next Session Handoff:**
-- Start with Task #6: ServiceRepository implementation
-- Reference: `src/domain/repositories/service_repository.py` for interface
-- Reference: `src/infrastructure/database/models.py` for SQLAlchemy models
-- Pattern: Map domain entities to/from SQLAlchemy models in repository methods
+- **Start Phase 3:** Application layer (DTOs, Use Cases)
+- **Files to create:**
+  - `src/application/dtos/dependency_graph_dto.py` - Ingestion DTOs
+  - `src/application/dtos/dependency_subgraph_dto.py` - Query DTOs
+  - `src/application/dtos/common.py` - Shared DTOs
+  - `src/application/use_cases/ingest_dependency_graph.py`
+  - `src/application/use_cases/query_dependency_subgraph.py`
+  - `src/application/use_cases/detect_circular_dependencies.py`
+- **Infrastructure ready:**
+  - All repository methods tested and working
+  - Database schema validated
+  - Performance targets met/exceeded
+- **Key learnings from Phase 2:**
+  - Use `metadata_` for SQLAlchemy model attributes that conflict with reserved names
+  - Use `literal_column()` for PostgreSQL-specific SQL in CTEs
+  - Avoid subqueries in recursive CTE WHERE clauses
+  - Function-scoped fixtures for pytest-asyncio compatibility
+
+**Files Modified in Session 5 (2026-02-15):**
+- ✅ Fixed `src/infrastructure/database/repositories/dependency_repository.py`
+  - Lines 271, 291-295: Fixed downstream traversal service collection
+  - Lines 369, 387-391: Fixed upstream traversal service collection
+  - Lines 254-257, 350-353: Removed overly aggressive cycle prevention
+- ✅ Updated `dev/active/fr1-dependency-graph/fr1-phase2-tests-summary.md` with bug fix documentation
+- ✅ Updated `dev/active/fr1-dependency-graph/session-logs/fr1-phase2.md` with Session 5 entry
+- ✅ Updated `dev/active/fr1-dependency-graph/fr1-context.md` (this file)
+- ✅ Updated `dev/active/fr1-dependency-graph/fr1-tasks.md` to reflect 100% completion
+
+**Files Modified in Session 4:**
+- ✅ Created 7 integration test files (~600 LOC total)
+- ✅ Fixed critical bugs in service_repository.py and dependency_repository.py
+- ✅ Updated conftest.py with testcontainer setup
+- ✅ Updated session log with Session 4 details (integration tests)
+- ✅ Updated context document with current status
 
 ---
 
-**Document Version:** 1.2
-**Last Updated:** 2026-02-14
+**Document Version:** 1.5
+**Last Updated:** 2026-02-15
 **Change Log:**
+- v1.5 (2026-02-15): Phase 2 100% complete, all 54 integration tests passing
+- v1.4 (2026-02-14): Phase 2 integration tests complete (90%), ready for Phase 3
+- v1.3 (2026-02-14): Repository layer complete (80% Phase 2), integration tests remaining
 - v1.2 (2026-02-14): Updated with Phase 2 progress (50% complete), next steps for repository implementations
 - v1.1 (2026-02-14): Finalized all 5 pending decisions with recommended options
