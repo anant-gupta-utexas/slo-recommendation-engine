@@ -215,3 +215,45 @@ class CircularDependencyAlertModel(Base):
             name="ck_alert_status",
         ),
     )
+
+
+class ApiKeyModel(Base):
+    """SQLAlchemy model for the api_keys table.
+
+    Stores API keys for authenticating API clients.
+    Keys are stored as bcrypt hashes for security.
+    """
+
+    __tablename__ = "api_keys"
+
+    # Primary key
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    # Key identifier (human-readable name)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+
+    # Bcrypt hash of the API key
+    key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Client metadata
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Revocation
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    revoked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Audit timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )

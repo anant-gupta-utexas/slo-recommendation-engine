@@ -94,7 +94,7 @@ _engine: AsyncEngine | None = None
 _async_session_factory: async_sessionmaker | None = None
 
 
-def init_db(
+async def init_db(
     database_url: str | None = None,
     pool_size: int | None = None,
     max_overflow: int | None = None,
