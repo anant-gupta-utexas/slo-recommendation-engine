@@ -18,6 +18,9 @@ dependencies = [
     "pydantic>=2.8.0",
     "pydantic-settings>=2.4.0",
 
+    # Security
+    "bcrypt>=4.1.0",
+
     # Caching & Rate Limiting
     "redis[hiredis]>=5.0.0",
 
