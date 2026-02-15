@@ -131,6 +131,7 @@ class ServiceRepository(ServiceRepositoryInterface):
         stmt = stmt.on_conflict_do_update(
             index_elements=["service_id"],
             set_={
+                # Both keys and values use database column names
                 "metadata": stmt.excluded.metadata,
                 "criticality": stmt.excluded.criticality,
                 "team": stmt.excluded.team,
@@ -162,16 +163,19 @@ class ServiceRepository(ServiceRepositoryInterface):
             raise ValueError(f"Service with id '{service.id}' does not exist")
 
         # Update using SQLAlchemy update statement
+        # Use column references to avoid metadata attribute conflict
         stmt = (
             update(ServiceModel)
             .where(ServiceModel.id == service.id)
             .values(
-                service_id=service.service_id,
-                metadata=service.metadata,
-                criticality=service.criticality.value,
-                team=service.team,
-                discovered=service.discovered,
-                updated_at=service.updated_at,
+                {
+                    ServiceModel.service_id: service.service_id,
+                    ServiceModel.metadata_: service.metadata,
+                    ServiceModel.criticality: service.criticality.value,
+                    ServiceModel.team: service.team,
+                    ServiceModel.discovered: service.discovered,
+                    ServiceModel.updated_at: service.updated_at,
+                }
             )
             .returning(ServiceModel)
         )
@@ -193,7 +197,7 @@ class ServiceRepository(ServiceRepositoryInterface):
         return Service(
             id=model.id,
             service_id=model.service_id,
-            metadata=model.metadata,
+            metadata=model.metadata_,
             criticality=Criticality(model.criticality),
             team=model.team,
             discovered=model.discovered,
@@ -213,7 +217,7 @@ class ServiceRepository(ServiceRepositoryInterface):
         return ServiceModel(
             id=entity.id,
             service_id=entity.service_id,
-            metadata=entity.metadata,
+            metadata_=entity.metadata,
             criticality=entity.criticality.value,
             team=entity.team,
             discovered=entity.discovered,
@@ -233,7 +237,7 @@ class ServiceRepository(ServiceRepositoryInterface):
         return {
             "id": entity.id,
             "service_id": entity.service_id,
-            "metadata": entity.metadata,
+            "metadata_": entity.metadata,  # Use metadata_ to avoid SQLAlchemy conflict
             "criticality": entity.criticality.value,
             "team": entity.team,
             "discovered": entity.discovered,

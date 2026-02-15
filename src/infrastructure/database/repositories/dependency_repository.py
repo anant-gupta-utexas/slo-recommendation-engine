@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 from uuid import UUID
 
-from sqlalchemy import and_, func, literal_column, or_, select, text, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import and_, cast, func, literal_column, or_, select, text, update
+from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.service import Service
@@ -191,7 +191,7 @@ class DependencyRepository(DependencyRepositoryInterface):
         # Fetch full service entities for all visited services
         services = await self._fetch_services(visited_services)
 
-        return services, edges
+        return {"services": services, "edges": edges}
 
     async def _traverse_downstream(
         self, service_id: UUID, max_depth: int, include_stale: bool
@@ -214,13 +214,15 @@ class DependencyRepository(DependencyRepositoryInterface):
             else literal_column("true")
         )
 
+        # Create initial path array using raw SQL
+        # PostgreSQL ARRAY constructor with bind parameter
+        initial_path = literal_column(f"ARRAY['{service_id}'::uuid, service_dependencies.target_service_id]")
+
         base_query = (
             select(
                 ServiceDependencyModel,
                 literal_column("1").label("depth"),
-                func.array([service_id, ServiceDependencyModel.target_service_id]).label(
-                    "path"
-                ),
+                initial_path.label("path"),
             )
             .where(
                 and_(
@@ -250,10 +252,6 @@ class DependencyRepository(DependencyRepositoryInterface):
                 and_(
                     base_query.c.depth < max_depth,
                     stale_condition,
-                    # Cycle prevention: target not in path
-                    ~ServiceDependencyModel.target_service_id.in_(
-                        func.unnest(base_query.c.path)
-                    ),
                 )
             )
         )
@@ -267,7 +265,7 @@ class DependencyRepository(DependencyRepositoryInterface):
 
         # Map to entities and extract visited services
         edges = []
-        visited_services = [service_id]  # Include starting service
+        visited_services = []  # Don't include starting service
 
         for row in result:
             model = ServiceDependencyModel(
@@ -287,9 +285,13 @@ class DependencyRepository(DependencyRepositoryInterface):
                 updated_at=row.updated_at,
             )
             edges.append(self._to_entity(model))
-            visited_services.extend([row.source_service_id, row.target_service_id])
+            # For downstream, only collect target services (services being called)
+            visited_services.append(row.target_service_id)
 
-        return edges, list(set(visited_services))
+        # Remove the starting service from visited services (don't include in results)
+        visited_service_set = set(visited_services)
+        visited_service_set.discard(service_id)
+        return edges, list(visited_service_set)
 
     async def _traverse_upstream(
         self, service_id: UUID, max_depth: int, include_stale: bool
@@ -311,13 +313,15 @@ class DependencyRepository(DependencyRepositoryInterface):
             else literal_column("true")
         )
 
+        # Create initial path for upstream: [source_service_id, service_id]
+        # Use raw SQL with PostgreSQL ARRAY constructor
+        initial_path_upstream = literal_column(f"ARRAY[service_dependencies.source_service_id, '{service_id}'::uuid]")
+
         base_query = (
             select(
                 ServiceDependencyModel,
                 literal_column("1").label("depth"),
-                func.array([ServiceDependencyModel.source_service_id, service_id]).label(
-                    "path"
-                ),
+                initial_path_upstream.label("path"),
             )
             .where(
                 and_(
@@ -347,10 +351,6 @@ class DependencyRepository(DependencyRepositoryInterface):
                 and_(
                     base_query.c.depth < max_depth,
                     stale_condition,
-                    # Cycle prevention: source not in path
-                    ~ServiceDependencyModel.source_service_id.in_(
-                        func.unnest(base_query.c.path)
-                    ),
                 )
             )
         )
@@ -364,7 +364,7 @@ class DependencyRepository(DependencyRepositoryInterface):
 
         # Map to entities and extract visited services
         edges = []
-        visited_services = [service_id]  # Include starting service
+        visited_services = []  # Don't include starting service
 
         for row in result:
             model = ServiceDependencyModel(
@@ -384,9 +384,13 @@ class DependencyRepository(DependencyRepositoryInterface):
                 updated_at=row.updated_at,
             )
             edges.append(self._to_entity(model))
-            visited_services.extend([row.source_service_id, row.target_service_id])
+            # For upstream, only collect source services (services that call us)
+            visited_services.append(row.source_service_id)
 
-        return edges, list(set(visited_services))
+        # Remove the starting service from visited services (don't include in results)
+        visited_service_set = set(visited_services)
+        visited_service_set.discard(service_id)
+        return edges, list(visited_service_set)
 
     async def _fetch_services(self, service_ids: list[UUID]) -> list[Service]:
         """Fetch full service entities for given UUIDs.

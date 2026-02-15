@@ -45,8 +45,9 @@ class ServiceModel(Base):
     service_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 
     # Service metadata (JSONB for flexible schema)
-    metadata: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
+    # Note: Using metadata_ to avoid conflict with SQLAlchemy's reserved metadata attribute
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
     )
 
     # Criticality level
