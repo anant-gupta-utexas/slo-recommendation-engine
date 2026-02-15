@@ -108,35 +108,45 @@
 
 ---
 
-## Phase 2: Infrastructure & Persistence (Week 2)
+## Phase 2: Infrastructure & Persistence (Week 2) - IN PROGRESS
 
-### Database Schema [M]
-- [ ] Create `alembic/versions/001_create_services_table.py`
-  - [ ] Define `services` table with all columns
-  - [ ] Add indexes: service_id, team, criticality, discovered
-  - [ ] Add `update_updated_at_column()` trigger function
-  - [ ] Add trigger for `updated_at` auto-update
+### Database Schema [M] ✅
+- [✓] Initialize Alembic for database migrations
+  - [✓] Run `alembic init alembic`
+  - [✓] Configure `alembic.ini` with env var support
+  - [✓] Update `alembic/env.py` for async SQLAlchemy
+  - [✓] Enable Ruff post-write hook for migrations
+
+- [✓] Create `src/infrastructure/database/models.py`
+  - [✓] Define `Base` class with `AsyncAttrs`
+  - [✓] Define `ServiceModel` with all columns and constraints
+  - [✓] Define `ServiceDependencyModel` with FKs and constraints
+  - [✓] Define `CircularDependencyAlertModel` with JSONB cycle_path
+  - [✓] All models use UUID primary keys with `uuid4` default
+  - [✓] All timestamps use UTC timezone
+  - [✓] Update `__init__.py` with model exports
+
+- [✓] Create `alembic/versions/001_create_services_table.py` (13cdc22bf8f3)
+  - [✓] Define `services` table with all columns
+  - [✓] Add indexes: service_id, team, criticality, discovered
+  - [✓] Add `update_updated_at_column()` trigger function
+  - [✓] Add trigger for `updated_at` auto-update
   - [ ] Test migration upgrade/downgrade
 
-- [ ] Create `alembic/versions/002_create_service_dependencies_table.py`
-  - [ ] Define `service_dependencies` table with all columns
-  - [ ] Add foreign keys to `services`
-  - [ ] Add constraints: no self-loops, confidence score bounds
-  - [ ] Add unique constraint: (source, target, discovery_source)
-  - [ ] Add indexes: source, target, (source, target), discovery_source, last_observed, is_stale
-  - [ ] Add trigger for `updated_at` auto-update
+- [✓] Create `alembic/versions/002_create_service_dependencies_table.py` (4f4258078909)
+  - [✓] Define `service_dependencies` table with all columns
+  - [✓] Add foreign keys to `services` with CASCADE delete
+  - [✓] Add constraints: no self-loops, confidence score bounds
+  - [✓] Add unique constraint: (source, target, discovery_source)
+  - [✓] Add indexes: source, target, (source, target), discovery_source, last_observed, is_stale
+  - [✓] Add trigger for `updated_at` auto-update
   - [ ] Test migration upgrade/downgrade
 
-- [ ] Create `alembic/versions/003_create_circular_dependency_alerts_table.py`
-  - [ ] Define `circular_dependency_alerts` table
-  - [ ] Add unique constraint on cycle_path JSONB
-  - [ ] Add indexes: status, detected_at
+- [✓] Create `alembic/versions/003_create_circular_dependency_alerts_table.py` (7b72a01346cf)
+  - [✓] Define `circular_dependency_alerts` table
+  - [✓] Add unique constraint on cycle_path JSONB
+  - [✓] Add indexes: status, detected_at
   - [ ] Test migration upgrade/downgrade
-
-- [ ] Create `src/infrastructure/database/models.py`
-  - [ ] Define SQLAlchemy models for all tables
-  - [ ] Map domain entities to ORM models
-  - [ ] Test model creation and relationships
 
 ### Repository Implementations [XL]
 - [ ] Create `src/infrastructure/database/repositories/service_repository.py`
