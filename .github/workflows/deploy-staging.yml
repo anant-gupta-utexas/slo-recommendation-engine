@@ -1,9 +1,12 @@
 name: Deploy to Staging
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:  # Allow manual triggering
+# Workflow disabled - triggers commented out
+# Uncomment the 'on:' section below to re-enable
+on: []
+# on:
+#   push:
+#     branches: [ main ]
+#   workflow_dispatch:  # Allow manual triggering
 
 env:
   KUBE_NAMESPACE: slo-engine-staging
