@@ -5,9 +5,8 @@ Provides liveness and readiness probes for Kubernetes.
 Also provides Prometheus metrics endpoint.
 """
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.cache.health import check_redis_health
 from src.infrastructure.database.health import check_database_health_with_session
@@ -48,23 +47,27 @@ async def liveness() -> dict:
         503: {"description": "Service is not ready (dependencies unavailable)"},
     },
 )
-async def readiness(
-    session: AsyncSession = Depends(get_async_session),
-) -> JSONResponse:
+async def readiness() -> JSONResponse:
     """
     Readiness probe - check if the service can handle requests.
 
     Checks:
     - Database connectivity
+    - Redis connectivity
 
     Returns 200 if all dependencies are healthy, 503 otherwise.
     Used by Kubernetes to determine if the pod should receive traffic.
     """
     checks = {}
 
-    # Check database
-    db_healthy = await check_database_health_with_session(session)
-    checks["database"] = "healthy" if db_healthy else "unhealthy"
+    # Check database — gracefully handle uninitialised pool
+    try:
+        async for session in get_async_session():
+            db_healthy = await check_database_health_with_session(session)
+            checks["database"] = "healthy" if db_healthy else "unhealthy"
+            break
+    except RuntimeError:
+        checks["database"] = "unhealthy"
 
     # Check Redis
     redis_healthy = await check_redis_health()

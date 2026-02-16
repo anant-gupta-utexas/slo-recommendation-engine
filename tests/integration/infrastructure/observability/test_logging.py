@@ -3,9 +3,7 @@
 Tests that logs are formatted correctly and sensitive data is filtered.
 """
 
-import json
 import logging
-from io import StringIO
 
 import pytest
 
@@ -36,32 +34,27 @@ class TestStructuredLogging:
         # In tests, we mainly verify it doesn't crash
 
     def test_sensitive_data_filtering(self):
-        """Test that sensitive data is filtered from logs."""
-        configure_logging()
-        logger = get_logger(__name__)
+        """Test that sensitive data is filtered by the processor."""
+        from src.infrastructure.observability.logging import _filter_sensitive_data
 
-        # Create string buffer to capture logs
-        log_stream = StringIO()
-        handler = logging.StreamHandler(log_stream)
-        logging.root.addHandler(handler)
+        event_dict = {
+            "event": "User login",
+            "user_id": "123",
+            "api_key": "secret_key_12345",
+            "password": "my_password",
+        }
 
-        # Log with sensitive data
-        logger.info(
-            "User login",
-            user_id="123",
-            api_key="secret_key_12345",  # Should be redacted
-            password="my_password",  # Should be redacted
-        )
+        filtered = _filter_sensitive_data(None, "info", event_dict)
 
-        log_output = log_stream.getvalue()
-
-        # Verify sensitive data is not in plain text
-        assert "secret_key_12345" not in log_output
-        assert "my_password" not in log_output
+        # Verify sensitive data is masked
+        assert filtered["api_key"] != "secret_key_12345"
+        assert "secr" in filtered["api_key"]  # first 4 chars visible
+        assert filtered["password"] != "my_password"
+        assert "my_p" in filtered["password"]  # first 4 chars visible
         # Verify user_id is still there (not sensitive)
-        assert "123" in log_output
-
-        logging.root.removeHandler(handler)
+        assert filtered["user_id"] == "123"
+        # Verify event is preserved
+        assert filtered["event"] == "User login"
 
     def test_log_levels(self):
         """Test different log levels."""

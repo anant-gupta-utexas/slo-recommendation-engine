@@ -5,13 +5,25 @@ Uses httpx mock to simulate Prometheus responses without requiring a real instan
 """
 
 import pytest
-from httpx import AsyncClient, Response
+import httpx
+from httpx import AsyncClient, Response, Request
 
 from src.infrastructure.integrations.otel_service_graph import (
     InvalidMetricsError,
     OTelServiceGraphClient,
     PrometheusUnavailableError,
 )
+
+
+def _make_response(status_code: int, **kwargs) -> Response:
+    """Create an httpx Response with a dummy request attached.
+
+    httpx 0.28+ requires a request instance on the response for
+    raise_for_status() to work.
+    """
+    resp = Response(status_code, **kwargs)
+    resp.request = Request("GET", "http://mock-prometheus:9090/api/v1/query")
+    return resp
 
 
 class TestOTelServiceGraphClient:
@@ -28,7 +40,7 @@ class TestOTelServiceGraphClient:
             if query in responses:
                 return responses[query]
             # Default: no metrics found
-            return Response(
+            return _make_response(
                 200,
                 json={
                     "status": "success",
@@ -43,7 +55,7 @@ class TestOTelServiceGraphClient:
     async def test_fetch_service_graph_success(self, mock_prometheus):
         """Test successful fetch of service graph metrics."""
         # Mock Prometheus response with service graph metrics
-        mock_prometheus["traces_service_graph_request_total"] = Response(
+        mock_prometheus["traces_service_graph_request_total"] = _make_response(
             200,
             json={
                 "status": "success",
@@ -116,7 +128,7 @@ class TestOTelServiceGraphClient:
     async def test_fetch_service_graph_empty(self, mock_prometheus):
         """Test handling of empty metrics (no services discovered)."""
         # Mock empty response
-        mock_prometheus["traces_service_graph_request_total"] = Response(
+        mock_prometheus["traces_service_graph_request_total"] = _make_response(
             200,
             json={
                 "status": "success",
@@ -137,7 +149,7 @@ class TestOTelServiceGraphClient:
     async def test_fetch_service_graph_missing_labels(self, mock_prometheus):
         """Test handling of metrics with missing client/server labels."""
         # Mock response with invalid metrics
-        mock_prometheus["traces_service_graph_request_total"] = Response(
+        mock_prometheus["traces_service_graph_request_total"] = _make_response(
             200,
             json={
                 "status": "success",
@@ -176,7 +188,7 @@ class TestOTelServiceGraphClient:
     async def test_fetch_service_graph_self_loop_filtered(self, mock_prometheus):
         """Test that self-loops (service calling itself) are filtered out."""
         # Mock response with self-loop
-        mock_prometheus["traces_service_graph_request_total"] = Response(
+        mock_prometheus["traces_service_graph_request_total"] = _make_response(
             200,
             json={
                 "status": "success",
@@ -233,7 +245,7 @@ class TestOTelServiceGraphClient:
     async def test_prometheus_error_response(self, mock_prometheus):
         """Test handling of Prometheus error responses."""
         # Mock error response
-        mock_prometheus["traces_service_graph_request_total"] = Response(
+        mock_prometheus["traces_service_graph_request_total"] = _make_response(
             200,
             json={
                 "status": "error",
@@ -253,7 +265,7 @@ class TestOTelServiceGraphClient:
         """Test handling of Prometheus HTTP errors (500, 503, etc.)."""
 
         async def mock_get_500(*args, **kwargs):
-            return Response(500, text="Internal Server Error")
+            return _make_response(500, text="Internal Server Error")
 
         monkeypatch.setattr(AsyncClient, "get", mock_get_500)
 

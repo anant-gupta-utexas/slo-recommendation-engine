@@ -4,9 +4,12 @@ Tests liveness, readiness probes with dependency health checks.
 """
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from src.infrastructure.api.main import app
+
+
+transport = ASGITransport(app=app)
 
 
 class TestHealthEndpoints:
@@ -15,7 +18,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_liveness_probe_always_returns_200(self):
         """Test that /health endpoint always returns 200 (liveness)."""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health")
 
             assert response.status_code == 200
@@ -26,7 +29,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_readiness_probe_checks_dependencies(self):
         """Test that /health/ready checks database and Redis."""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health/ready")
 
             # Response can be 200 (ready) or 503 (not ready) depending on services
@@ -46,7 +49,7 @@ class TestHealthEndpoints:
         """Test that readiness returns 503 when a dependency is unhealthy."""
         # This test would require mocking database/Redis to simulate failure
         # For now, we just verify the response structure
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health/ready")
 
             data = response.json()
@@ -66,7 +69,7 @@ class TestMetricsEndpoint:
     @pytest.mark.asyncio
     async def test_metrics_endpoint_returns_prometheus_format(self):
         """Test that /metrics returns Prometheus exposition format."""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/metrics")
 
             assert response.status_code == 200
@@ -80,7 +83,7 @@ class TestMetricsEndpoint:
     async def test_metrics_not_rate_limited(self):
         """Test that /metrics endpoint is not rate limited."""
         # Metrics endpoint should be excluded from rate limiting
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             # Make multiple requests rapidly
             for _ in range(20):
                 response = await client.get("/api/v1/metrics")
@@ -90,7 +93,7 @@ class TestMetricsEndpoint:
     async def test_health_not_rate_limited(self):
         """Test that health endpoints are not rate limited."""
         # Health endpoints should be excluded from rate limiting
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
             # Make multiple requests rapidly
             for _ in range(20):
                 response = await client.get("/api/v1/health")
