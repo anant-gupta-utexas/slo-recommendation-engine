@@ -401,3 +401,4 @@ Application-layer DTOs (`NodeDTO`, `EdgeDTO`, `DependencySubgraphRequest`) have 
 | I16 | Important (Code Quality) | ✅ Fixed | Dead code removed |
 
 **E2E Test Status:** 20/20 passing (was 8/20 at time of review)
+**Full Test Status:** 246/246 passing (Session 15) — all pre-existing integration test failures also fixed

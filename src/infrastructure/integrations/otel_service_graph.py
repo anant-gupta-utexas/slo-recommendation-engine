@@ -123,16 +123,16 @@ class OTelServiceGraphClient:
 
         except httpx.HTTPStatusError as e:
             logger.error(
-                "Prometheus HTTP error",
-                status_code=e.response.status_code,
-                error=str(e),
+                "Prometheus HTTP error: status_code=%s error=%s",
+                e.response.status_code,
+                str(e),
             )
             raise PrometheusUnavailableError(
                 f"Prometheus returned error: {e.response.status_code}"
             ) from e
 
         except httpx.RequestError as e:
-            logger.error("Prometheus connection error", error=str(e))
+            logger.error("Prometheus connection error: %s", str(e))
             raise PrometheusUnavailableError(
                 f"Failed to connect to Prometheus: {e}"
             ) from e
@@ -180,8 +180,8 @@ class OTelServiceGraphClient:
 
                 if not client or not server:
                     logger.warning(
-                        "Skipping metric with missing client/server labels",
-                        labels=metric_labels,
+                        "Skipping metric with missing client/server labels: %s",
+                        metric_labels,
                     )
                     continue
 
@@ -225,9 +225,9 @@ class OTelServiceGraphClient:
                 edges.append(edge)
 
             logger.info(
-                "Successfully fetched OTel Service Graph",
-                services_count=len(nodes_map),
-                edges_count=len(edges),
+                "Successfully fetched OTel Service Graph: services=%d edges=%d",
+                len(nodes_map),
+                len(edges),
             )
 
             return DependencyGraphIngestRequest(

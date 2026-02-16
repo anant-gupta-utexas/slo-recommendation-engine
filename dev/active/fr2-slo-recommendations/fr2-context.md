@@ -2,7 +2,7 @@
 ## SLO Recommendation Generation
 
 **Created:** 2026-02-15
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -242,6 +242,14 @@ No new library dependencies required. FR-2 uses:
 4. **`metadata_` attribute naming** — reuse FR-1 pattern for SQLAlchemy reserved names
 5. **Fixture pattern: one fixture per dependency** — maintain isolation
 6. **Statistics bugs** — double-check len() boundaries in list operations
+7. **Parameterized CTEs** — never use `literal_column()` with f-strings for array construction; use `sqlalchemy.dialects.postgresql.array()` + `bindparam()` + `type_coerce()` (FR-1 C1 fix)
+8. **CTE cycle prevention** — use `!= func.all_(path)` instead of `NOT IN (subquery)` because PostgreSQL prohibits recursive CTE self-reference inside subqueries (FR-1 C10 fix)
+9. **E2E test isolation** — dispose and reinit DB connection pool per test function to avoid `RuntimeError: Task got Future attached to a different loop` with pytest-asyncio (FR-1 Session 14 fix)
+10. **Rate limiter state** — clear `RateLimitMiddleware.buckets` between E2E tests to prevent 429s from state leaking across tests
+11. **HTTPException re-raise** — always add `except HTTPException: raise` before `except Exception` catch-all in route handlers, or FastAPI's custom exception handlers won't fire
+12. **Correlation ID consistency** — exception handlers should use `request.state.correlation_id` (set by middleware) rather than generating a new one
+13. **Root service inclusion** — when returning subgraph results, ensure the queried service itself is always present in the nodes list
+14. **Podman support** — Podman works as a Docker drop-in on macOS; set `~/.docker/config.json` to `{"auths": {}}` to avoid credential store errors with Python Docker SDK
 
 ---
 
@@ -280,9 +288,10 @@ No new library dependencies required. FR-2 uses:
 - None. FR-2 can proceed independently of FR-1 Phase 4 (API layer).
 
 **FR-1 Status (for reference):**
-- Phase 1-3: Complete (domain, infrastructure, application)
-- Phase 4: In progress (API layer)
-- Phases 5-6: Not started
+- Phases 1-6: All complete — PRODUCTION READY
+- Code review remediation: All 11 critical issues fixed (Session 14)
+- Tests: 148 unit, 60 integration, 20/20 E2E passing
+- Key fixes relevant to FR-2: `traverse_graph` returns tuple (C2), CTE cycle prevention added (C10), `metadata_` attribute fixed (C9), Tarjan's detector now synchronous and iterative (C4/C5/I13)
 
 ---
 
@@ -365,23 +374,6 @@ src/domain/repositories/telemetry_query_service.py
 
 ---
 
-## Session 4 Additions (2026-02-15)
-
-**Completed:**
-- ✅ Task 1.5: Composite Availability Service (26 tests, 97% coverage)
-- ✅ Task 1.6: Weighted Attribution Service (28 tests, 100% coverage)
-- ✅ Phase 1 Domain Foundation Complete
-
-**Technical Highlights:**
-- Serial dependency composition: R = R_self × ∏R_dep
-- Parallel redundancy: R = 1 - ∏(1 - R_replica)
-- Bottleneck identification (weakest link)
-- Heuristic feature weights for availability and latency
-
-**Tests Added:** 54 (from 113 to 167)
-
----
-
 ## Next Session Handoff
 
 **Ready to Start:** Phase 2 - Application Layer (DTOs and Use Cases)
@@ -403,3 +395,8 @@ pytest tests/unit/domain/ -v  # Should show 262 tests passing (167 FR-2 + 95 FR-
 
 **Document Version:** 1.1
 **Last Updated:** 2026-02-15 (Session 4)
+**Document Version:** 1.1
+**Last Updated:** 2026-02-16
+**Change Log:**
+- v1.1 (2026-02-16): Updated FR-1 status (all phases complete, code review fixed), added 8 new lessons from FR-1 Session 14
+- v1.0 (2026-02-15): Initial creation
