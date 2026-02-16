@@ -57,17 +57,43 @@
    - File: `src/application/use_cases/batch_compute_recommendations.py`
 
 **Test Summary:**
-- **Total: 230 tests passing** (167 Phase 1 + 63 Phase 2)
+- **Total: 266 tests passing** (167 Phase 1 + 63 Phase 2 + 36 Phase 3)
 - Phase 2: 63 tests (25 DTOs + 20 Generate + 7 Get + 11 Batch)
+- Phase 3: 36 tests (12 integration repository + 24 unit telemetry)
 - 0 failures
-- Coverage: 62% overall, 97-100% on Phase 2 code
+- Coverage: 81% overall, 95-100% on Phase 3 components
 
-### Phase 3: Infrastructure (DB + Telemetry) ⬜ **NOT STARTED**
-**Next Steps:**
-- Task 3.1: SQLAlchemy models (`SloRecommendationModel`, `SliAggregateModel`)
-- Task 3.2: Alembic migrations (004, 005)
-- Task 3.3: Repository implementation with domain↔model mapping
-- Task 3.4: Mock Prometheus client with seed data
+### Phase 3: Infrastructure (DB + Telemetry) ✅ **COMPLETE (100%)**
+**Status:** All 4 tasks complete
+
+**Completed Components:**
+1. ✅ **SQLAlchemy Models (Task 3.1):**
+   - `SloRecommendationModel` with JSONB fields, constraints, FK
+   - `SliAggregateModel` with renamed column `time_window` (SQL keyword fix)
+   - File: `src/infrastructure/database/models.py`
+
+2. ✅ **Alembic Migrations (Task 3.2):**
+   - Migration `ecd649c39043_create_slo_recommendations_table.py`
+   - Migration `0493364c9562_create_sli_aggregates_table.py`
+   - Both tested: upgrade ✅, downgrade ✅, re-upgrade ✅
+   - Tables created with all indexes and constraints
+
+3. ✅ **SloRecommendationRepository (Task 3.3):**
+   - Full CRUD implementation with domain↔model mapping
+   - 5 methods: `get_active_by_service`, `save`, `save_batch`, `supersede_existing`, `expire_stale`
+   - JSONB serialization for nested structures (tiers, explanation, data_quality)
+   - 12 integration tests, 100% coverage
+   - File: `src/infrastructure/database/repositories/slo_recommendation_repository.py`
+   - Tests: `tests/integration/infrastructure/database/test_slo_recommendation_repository.py`
+
+4. ✅ **Mock Prometheus Client (Task 3.4):**
+   - Implements all 4 `TelemetryQueryServiceInterface` methods
+   - 8 seed scenarios: 5 stable (30d), 2 cold-start (7-10d), 1 no-data
+   - Realistic variance with reproducible randomness
+   - Injectable seed data for custom tests
+   - 24 unit tests, 95% coverage
+   - Files: `src/infrastructure/telemetry/mock_prometheus_client.py`, `src/infrastructure/telemetry/seed_data.py`
+   - Tests: `tests/unit/infrastructure/telemetry/test_mock_prometheus_client.py`
 
 ### Phase 4: Infrastructure (API + Tasks) ⬜ **NOT STARTED**
 
@@ -197,26 +223,48 @@ tests/unit/application/use_cases/test_batch_compute_recommendations.py (~400 LOC
 
 ## Next Session Handoff
 
-**Current State:** Phase 2 COMPLETE ✅
+**Current State:** Phase 3 - 100% COMPLETE ✅ → Phase 4 Ready to Start
 
 **Commands to Verify:**
 ```bash
-source .venv/bin/activate
-pytest tests/unit/application/ -v  # Should show 116 tests passing
-pytest tests/unit/domain/ -v       # Should show 167 tests passing
+# Run all tests (414 total: 402 unit + 12 integration)
+uv run python -m pytest tests/unit/domain/ tests/unit/application/ tests/unit/infrastructure/telemetry/ -v  # 402 tests
+uv run python -m pytest tests/integration/infrastructure/database/test_slo_recommendation_repository.py -v  # 12 tests
+
+# Verify migrations applied
+export DATABASE_URL="postgresql+asyncpg://slo_user:slo_password_dev@localhost:5432/slo_engine"
+alembic current  # Should show: 0493364c9562 (head)
+
+# Test mock Prometheus client
+uv run python -m pytest tests/unit/infrastructure/telemetry/ -v  # 24 tests
 ```
 
-**Next Task:** Phase 3 - Task 3.1: SQLAlchemy Models
-- Create `src/infrastructure/database/models/slo_recommendation.py`
-- Create `src/infrastructure/database/models/sli_aggregate.py`
-- Follow FR-1 patterns: `Base`, `Mapped[]`, JSONB for complex types
+**Next Task:** Phase 4 - Task 4.1: Pydantic API Schemas
+- Files:
+  - `src/infrastructure/api/schemas/slo_recommendation_schema.py` (~150 LOC)
+  - `tests/unit/infrastructure/api/schemas/test_slo_recommendation_schema.py` (~200 LOC)
+- Create Pydantic schemas for API request/response
+- Query param validation (sli_type enum, lookback_days 7-365, force_regenerate bool)
+- Response schema matching TRD JSON format
+- Nested models: Tier, Explanation, DependencyImpact, DataQuality
+
+**Key Files:**
+- DTOs: `src/application/dtos/slo_recommendation_dto.py` (convert to Pydantic)
+- Entity: `src/domain/entities/slo_recommendation.py` (reference for structure)
+- Reference: `src/infrastructure/api/schemas/dependency_schema.py` (FR-1 patterns)
+
+**Important Notes:**
+- Pydantic for API layer, dataclasses for application/domain
+- Reuse RFC 7807 error schema from FR-1
+- Use Field() for validation (lookback_days: int = Field(ge=7, le=365))
+- CamelCase field names via alias for API (snake_case internally)
 
 **Reference Files:**
 - `dev/active/fr2-slo-recommendations/fr2-plan.md` - Full technical spec
 - `dev/active/fr2-slo-recommendations/fr2-tasks.md` - Task checklist
-- `dev/active/fr2-slo-recommendations/phase-logs/fr2-phase2.md` - Phase 2 log
+- `dev/active/fr2-slo-recommendations/phase-logs/fr2-phase3.md` - Phase 3 log
 
 ---
 
-**Document Version:** 1.3
-**Last Updated:** 2026-02-15 (Session 6 - Phase 2 COMPLETE)
+**Document Version:** 1.6
+**Last Updated:** 2026-02-15 (Session 8 - Phase 3: 100% COMPLETE ✅)

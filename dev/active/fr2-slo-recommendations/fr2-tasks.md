@@ -1,7 +1,7 @@
 # FR-2: SLO Recommendation Generation — Task Tracker
 
 **Created:** 2026-02-15
-**Last Updated:** 2026-02-15 (Session 2)
+**Last Updated:** 2026-02-15 (Session 7 - Phase 3: 50%)
 
 ---
 
@@ -153,56 +153,57 @@
 
 ### Tasks
 
-- [ ] **Task 3.1: SQLAlchemy Models** [Effort: M]
-  - Files: `src/infrastructure/database/models/slo_recommendation.py`, `src/infrastructure/database/models/sli_aggregate.py`
+- [x] **Task 3.1: SQLAlchemy Models** [Effort: M] ✅ **COMPLETE**
+  - Files: `src/infrastructure/database/models.py` (added to existing file)
   - Dependencies: Phase 2 complete
   - Acceptance:
-    - [ ] `SloRecommendationModel` with all columns and constraints
-    - [ ] `SliAggregateModel` with all columns and constraints
-    - [ ] JSONB for tiers, explanation, data_quality
-    - [ ] Check constraints for enums
-    - [ ] Follows FR-1 model patterns (Base class, Mapped[])
+    - [x] `SloRecommendationModel` with all columns and constraints
+    - [x] `SliAggregateModel` with all columns and constraints
+    - [x] JSONB for tiers, explanation, data_quality
+    - [x] Check constraints for enums
+    - [x] Follows FR-1 model patterns (Base class, Mapped[])
+    - [x] Fixed SQL reserved keyword issue: renamed "window" → "time_window"
 
-- [ ] **Task 3.2: Alembic Migrations** [Effort: S]
-  - Files: `alembic/versions/004_create_slo_recommendations_table.py`, `alembic/versions/005_create_sli_aggregates_table.py`
+- [x] **Task 3.2: Alembic Migrations** [Effort: S] ✅ **COMPLETE**
+  - Files: `alembic/versions/ecd649c39043_create_slo_recommendations_table.py`, `alembic/versions/0493364c9562_create_sli_aggregates_table.py`
   - Dependencies: Task 3.1
   - Acceptance:
-    - [ ] Migration 004: slo_recommendations table + indexes
-    - [ ] Migration 005: sli_aggregates table + indexes
-    - [ ] Both reversible
-    - [ ] FK to services.id validated
-    - [ ] Tested against real PostgreSQL
+    - [x] Migration ecd649c39043: slo_recommendations table + 3 indexes
+    - [x] Migration 0493364c9562: sli_aggregates table + 1 index
+    - [x] Both reversible (tested upgrade/downgrade)
+    - [x] FK to services.id validated with CASCADE delete
+    - [x] Tested against real PostgreSQL (docker-compose)
 
-- [ ] **Task 3.3: SloRecommendation Repository Implementation** [Effort: L]
+- [x] **Task 3.3: SloRecommendation Repository Implementation** [Effort: L] ✅ **COMPLETE**
   - Files: `src/infrastructure/database/repositories/slo_recommendation_repository.py`, `tests/integration/infrastructure/database/test_slo_recommendation_repository.py`
   - Dependencies: Task 3.1, Task 3.2
   - Acceptance:
-    - [ ] `get_active_by_service()` with optional sli_type filter
-    - [ ] `save()` inserts new recommendation
-    - [ ] `save_batch()` bulk inserts
-    - [ ] `supersede_existing()` marks active → superseded
-    - [ ] `expire_stale()` marks expired
-    - [ ] Domain ↔ model mapping
-    - [ ] >80% integration test coverage (testcontainers)
+    - [x] `get_active_by_service()` with optional sli_type filter
+    - [x] `save()` inserts new recommendation
+    - [x] `save_batch()` bulk inserts
+    - [x] `supersede_existing()` marks active → superseded
+    - [x] `expire_stale()` marks expired
+    - [x] Domain ↔ model mapping
+    - [x] 100% integration test coverage (12 tests passing, testcontainers)
 
-- [ ] **Task 3.4: Mock Prometheus Client** [Effort: L]
+- [x] **Task 3.4: Mock Prometheus Client** [Effort: L] ✅ **COMPLETE**
   - Files: `src/infrastructure/telemetry/mock_prometheus_client.py`, `src/infrastructure/telemetry/seed_data.py`, `tests/unit/infrastructure/telemetry/test_mock_prometheus_client.py`
   - Dependencies: Phase 1 Task 1.7
   - Acceptance:
-    - [ ] Implements all 4 TelemetryQueryServiceInterface methods
-    - [ ] Different data per service_id via seed data dict
-    - [ ] Seed: 5 services (30d), 2 services (10d), 1 service (no data)
-    - [ ] Realistic variance in rolling availability
-    - [ ] Injectable seed data for tests
-    - [ ] >90% unit test coverage
+    - [x] Implements all 4 TelemetryQueryServiceInterface methods
+    - [x] Different data per service_id via seed data dict (8 services)
+    - [x] Seed: 5 services (30d), 2 services (7-10d cold-start), 1 service (no data)
+    - [x] Realistic variance in rolling availability (reproducible randomness)
+    - [x] Injectable seed data for tests (constructor parameter)
+    - [x] 95% unit test coverage (24 tests passing)
 
 ### Phase 3 Checklist
-- [ ] 2 SQLAlchemy models created
-- [ ] 2 Alembic migrations created and tested
-- [ ] Repository with full CRUD tested
-- [ ] Mock Prometheus client with seed data
-- [ ] All tests passing
-- [ ] Total Phase 3 tests: ~XX passing
+- [x] 2 SQLAlchemy models created ✅
+- [x] 2 Alembic migrations created and tested ✅
+- [x] Repository with full CRUD tested (12 integration tests, 100% coverage) ✅
+- [x] Mock Prometheus client with seed data (24 unit tests, 95% coverage) ✅
+- [x] All tests passing (414 total: 402 unit + 12 integration) ✅
+- [x] **Phase 3: 100% COMPLETE** ✅
 
 ---
 
@@ -280,11 +281,17 @@
 |-------|--------|--------------|----------|
 | Phase 1: Domain | ✅ Complete (100%) | 167/167 | 97-100% |
 | Phase 2: Application | ✅ Complete (100%) | 63/63 | 97-100% |
-| Phase 3: Infrastructure (DB + Telemetry) | ⬜ Not Started | 0/~80 | — |
+| Phase 3: Infrastructure (DB + Telemetry) | ✅ Complete (100%) | 36/36 | 95-100% |
 | Phase 4: Infrastructure (API + Tasks) | ⬜ Not Started | 0/~60 | — |
-| **Total** | **✅ Phase 2: COMPLETE** | **230/~370** | **62%** |
+| **Total** | **✅ Phase 3 Complete → Phase 4 Next** | **266/~330** | **81%** |
+
+**Phase 3 Progress:**
+- ✅ Task 3.1: SQLAlchemy Models (COMPLETE)
+- ✅ Task 3.2: Alembic Migrations (COMPLETE)
+- ✅ Task 3.3: Repository Implementation (COMPLETE)
+- ✅ Task 3.4: Mock Prometheus Client (COMPLETE)
 
 ---
 
-**Document Version:** 1.3
-**Last Updated:** 2026-02-15 (Session 6 - Phase 2 COMPLETE)
+**Document Version:** 1.6
+**Last Updated:** 2026-02-15 (Session 8 - Phase 3: 100% COMPLETE ✅)
