@@ -1,7 +1,10 @@
-"""SQLAlchemy models for FR-1 Service Dependency Graph.
+"""SQLAlchemy models for Service Dependency Graph and SLO Recommendations.
 
 These models map domain entities to PostgreSQL tables using SQLAlchemy ORM.
 All tables use UUIDs as primary keys and include audit timestamps.
+
+FR-1: ServiceModel, ServiceDependencyModel, CircularDependencyAlertModel, ApiKeyModel
+FR-2: SloRecommendationModel, SliAggregateModel
 """
 
 from datetime import datetime, timezone
@@ -11,7 +14,9 @@ from uuid import uuid4
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DECIMAL,
     Float,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -256,4 +261,139 @@ class ApiKeyModel(Base):
     )
     last_used_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
+    )
+
+
+class SloRecommendationModel(Base):
+    """SQLAlchemy model for the slo_recommendations table (FR-2).
+
+    Stores pre-computed SLO recommendations for services with tiers and explanations.
+    """
+
+    __tablename__ = "slo_recommendations"
+
+    # Primary key
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    # Foreign key to services
+    service_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("services.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # SLI type
+    sli_type: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    # Metric name
+    metric: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # Recommendation tiers (JSONB)
+    tiers: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    # Explanation (JSONB)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    # Data quality metadata (JSONB)
+    data_quality: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    # Lookback window
+    lookback_window_start: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    lookback_window_end: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+
+    # Generation and expiry timestamps
+    generated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+
+    # Status
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+
+    __table_args__ = (
+        # SLI type validation
+        CheckConstraint(
+            "sli_type IN ('availability', 'latency')",
+            name="ck_slo_rec_sli_type",
+        ),
+        # Status validation
+        CheckConstraint(
+            "status IN ('active', 'superseded', 'expired')",
+            name="ck_slo_rec_status",
+        ),
+        # Lookback window sanity check
+        CheckConstraint(
+            "lookback_window_start < lookback_window_end",
+            name="ck_slo_rec_lookback_window",
+        ),
+    )
+
+
+class SliAggregateModel(Base):
+    """SQLAlchemy model for the sli_aggregates table (FR-2).
+
+    Stores pre-aggregated SLI metrics for efficient recommendation computation.
+    """
+
+    __tablename__ = "sli_aggregates"
+
+    # Primary key
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    # Foreign key to services
+    service_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("services.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # SLI type
+    sli_type: Mapped[str] = mapped_column(String(30), nullable=False)
+
+    # Time window (quoted because "window" is a SQL reserved keyword)
+    window: Mapped[str] = mapped_column("time_window", String(10), nullable=False)
+
+    # Aggregated value
+    value: Mapped[float] = mapped_column(DECIMAL, nullable=False)
+
+    # Sample count
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Computation timestamp
+    computed_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        # SLI type validation
+        CheckConstraint(
+            "sli_type IN ('availability', 'latency_p50', 'latency_p95', 'latency_p99', 'latency_p999', 'error_rate', 'request_rate')",
+            name="ck_sli_type",
+        ),
+        # Window validation
+        CheckConstraint(
+            "time_window IN ('1h', '1d', '7d', '28d', '90d')",
+            name="ck_sli_window",
+        ),
+        # Sample count non-negative
+        CheckConstraint(
+            "sample_count >= 0",
+            name="ck_sli_sample_count",
+        ),
     )

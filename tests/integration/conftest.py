@@ -117,5 +117,7 @@ async def clean_db(db_session: AsyncSession) -> None:
     # Delete all data from tables in reverse order of dependencies
     await db_session.execute(text("DELETE FROM circular_dependency_alerts"))
     await db_session.execute(text("DELETE FROM service_dependencies"))
+    await db_session.execute(text("DELETE FROM slo_recommendations"))
+    await db_session.execute(text("DELETE FROM sli_aggregates"))
     await db_session.execute(text("DELETE FROM services"))
     await db_session.commit()
