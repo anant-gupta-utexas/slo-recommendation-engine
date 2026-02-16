@@ -1,0 +1,214 @@
+# Default values for slo-engine Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  environment: production
+
+# Replica configuration
+replicaCount: 3
+
+# Image configuration
+image:
+  repository: ghcr.io/your-org/slo-engine
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/api/v1/metrics"
+  prometheus.io/port: "8000"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: slo-engine.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: slo-engine-tls
+      hosts:
+        - slo-engine.example.com
+
+# Resource requests and limits
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# Autoscaling configuration
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/health/ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - slo-engine
+          topologyKey: kubernetes.io/hostname
+
+# Application configuration
+config:
+  # Database configuration
+  database:
+    url: ""  # Override with secret or external value
+    poolSize: 20
+    maxOverflow: 10
+
+  # Redis configuration
+  redis:
+    url: ""  # Override with secret or external value
+    cacheTtl: 300
+
+  # API configuration
+  api:
+    workers: 4
+
+  # Rate limiting
+  rateLimit:
+    ingestion: 10
+    query: 60
+
+  # Observability
+  observability:
+    logLevel: "INFO"
+    traceSampleRate: 0.1
+    otlpEndpoint: "http://otel-collector:4318"
+
+  # Background tasks
+  backgroundTasks:
+    otelGraphIngestIntervalMinutes: 15
+    staleEdgeThresholdHours: 168
+
+  # Prometheus integration
+  prometheus:
+    url: "http://prometheus:9090"
+    timeoutSeconds: 30
+
+# Secrets (use external secrets operator or sealed secrets in production)
+secrets:
+  # Database credentials
+  databaseUrl: ""
+
+  # Redis credentials
+  redisUrl: ""
+
+  # API keys for authentication
+  # Note: These should be managed externally in production
+  apiKeys: []
+
+# External dependencies
+postgresql:
+  enabled: false  # Set to true to deploy PostgreSQL with the chart
+  # Use external PostgreSQL in production
+
+redis:
+  enabled: false  # Set to true to deploy Redis with the chart
+  # Use external Redis in production
+
+# Service monitor for Prometheus Operator
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+# Network policy
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432  # PostgreSQL
+        - protocol: TCP
+          port: 6379  # Redis
+        - protocol: TCP
+          port: 9090  # Prometheus

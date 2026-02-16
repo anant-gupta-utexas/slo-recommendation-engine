@@ -1,0 +1,19 @@
+apiVersion: v2
+name: slo-engine
+description: SLO Recommendation Engine - Service Dependency Graph & SLO Management
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - slo
+  - observability
+  - service-graph
+  - dependencies
+
+maintainers:
+  - name: SLO Engine Team
+    email: slo-engine@example.com
+
+sources:
+  - https://github.com/your-org/slo-recommendation-engine

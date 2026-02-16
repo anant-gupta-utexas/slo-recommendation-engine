@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "slo-engine.fullname" . }}-api
+  labels:
+    {{- include "slo-engine.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "slo-engine.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "slo-engine.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "slo-engine.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.global.environment | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "slo-engine.fullname" . }}-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "slo-engine.fullname" . }}-secrets
+                  key: redis-url
+            - name: DB_POOL_SIZE
+              value: {{ .Values.config.database.poolSize | quote }}
+            - name: DB_MAX_OVERFLOW
+              value: {{ .Values.config.database.maxOverflow | quote }}
+            - name: REDIS_CACHE_TTL
+              value: {{ .Values.config.redis.cacheTtl | quote }}
+            - name: API_WORKERS
+              value: {{ .Values.config.api.workers | quote }}
+            - name: RATE_LIMIT_INGESTION
+              value: {{ .Values.config.rateLimit.ingestion | quote }}
+            - name: RATE_LIMIT_QUERY
+              value: {{ .Values.config.rateLimit.query | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.observability.logLevel | quote }}
+            - name: OTEL_TRACE_SAMPLE_RATE
+              value: {{ .Values.config.observability.traceSampleRate | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.config.observability.otlpEndpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: "slo-engine"
+            - name: OTEL_GRAPH_INGEST_INTERVAL_MINUTES
+              value: {{ .Values.config.backgroundTasks.otelGraphIngestIntervalMinutes | quote }}
+            - name: STALE_EDGE_THRESHOLD_HOURS
+              value: {{ .Values.config.backgroundTasks.staleEdgeThresholdHours | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.config.prometheus.url | quote }}
+            - name: PROMETHEUS_TIMEOUT_SECONDS
+              value: {{ .Values.config.prometheus.timeoutSeconds | quote }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
