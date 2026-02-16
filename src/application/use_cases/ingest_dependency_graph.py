@@ -4,11 +4,9 @@ This module implements the use case for ingesting dependency graphs from
 various discovery sources.
 """
 
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from src.application.dtos.dependency_graph_dto import (
-    CircularDependencyInfo,
     DependencyGraphIngestRequest,
     DependencyGraphIngestResponse,
 )
@@ -291,17 +289,3 @@ class IngestDependencyGraphUseCase:
 
         return criticality_map[criticality_str]
 
-    def _get_service_id_from_uuid(self, uuid, services: list[Service]) -> str:
-        """Helper to get service_id from UUID.
-
-        Args:
-            uuid: Service UUID
-            services: List of Service entities
-
-        Returns:
-            Service business identifier
-        """
-        for service in services:
-            if service.id == uuid:
-                return service.service_id
-        return str(uuid)  # Fallback if not found

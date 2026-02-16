@@ -88,7 +88,12 @@ async def ingest_dependencies(
             source=request.source,
             timestamp=request.timestamp,
             nodes=[
-                NodeDTO(service_id=node.service_id, metadata=node.metadata)
+                NodeDTO(
+                    service_id=node.service_id,
+                    metadata=node.metadata,
+                    team=node.metadata.get("team"),
+                    criticality=node.metadata.get("criticality", "medium"),
+                )
                 for node in request.nodes
             ],
             edges=[
@@ -267,6 +272,8 @@ async def query_dependencies(
                 max_depth_reached=result.statistics.max_depth_reached,
             ),
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         # Domain validation error (e.g., depth > 10)
         raise HTTPException(

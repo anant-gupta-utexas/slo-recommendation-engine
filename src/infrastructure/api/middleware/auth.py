@@ -123,4 +123,4 @@ async def _update_last_used(session: AsyncSession, api_key_id: str) -> None:
         .values(last_used_at=datetime.now(timezone.utc))
     )
     await session.execute(stmt)
-    await session.commit()
+    # No explicit commit: the session generator's auto-commit handles this

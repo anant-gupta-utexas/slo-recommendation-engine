@@ -59,8 +59,8 @@ class DetectCircularDependenciesUseCase:
         # Get full graph as adjacency list
         adjacency_list = await self.dependency_repository.get_adjacency_list()
 
-        # Run Tarjan's algorithm to detect cycles
-        cycles = await self.detector.detect_cycles(adjacency_list)
+        # Run Tarjan's algorithm to detect cycles (synchronous, CPU-bound)
+        cycles = self.detector.detect_cycles(adjacency_list)
 
         # Create alerts for new cycles
         created_alerts: list[CircularDependencyAlert] = []

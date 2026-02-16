@@ -101,9 +101,11 @@ class TestQueryDependencySubgraphUseCase:
         assert response.service_id == "isolated-service"
         assert response.direction == "both"
         assert response.depth == 3
-        assert len(response.nodes) == 0
+        # Root service is always included even with no dependencies
+        assert len(response.nodes) == 1
+        assert response.nodes[0].service_id == "isolated-service"
         assert len(response.edges) == 0
-        assert response.statistics.total_nodes == 0
+        assert response.statistics.total_nodes == 1
         assert response.statistics.total_edges == 0
 
     @pytest.mark.asyncio
@@ -171,12 +173,15 @@ class TestQueryDependencySubgraphUseCase:
         assert response is not None
         assert response.service_id == "service-a"
         assert response.direction == "downstream"
-        assert len(response.nodes) == 1
+        # Root service + 1 downstream = 2 nodes
+        assert len(response.nodes) == 2
         assert len(response.edges) == 1
-        assert response.nodes[0].service_id == "service-b"
+        node_ids = {n.service_id for n in response.nodes}
+        assert "service-a" in node_ids
+        assert "service-b" in node_ids
         assert response.edges[0].source == "service-a"
         assert response.edges[0].target == "service-b"
-        assert response.statistics.total_nodes == 1
+        assert response.statistics.total_nodes == 2
         assert response.statistics.total_edges == 1
         assert response.statistics.downstream_services == 1
         assert response.statistics.upstream_services == 0
@@ -245,7 +250,8 @@ class TestQueryDependencySubgraphUseCase:
         assert response is not None
         assert response.service_id == "service-b"
         assert response.direction == "upstream"
-        assert len(response.nodes) == 1
+        # Root service + 1 upstream = 2 nodes
+        assert len(response.nodes) == 2
         assert len(response.edges) == 1
         assert response.statistics.upstream_services == 1
         assert response.statistics.downstream_services == 0
@@ -315,9 +321,10 @@ class TestQueryDependencySubgraphUseCase:
         # Assert
         assert response is not None
         assert response.direction == "both"
-        assert len(response.nodes) == 2
+        # Root service + upstream + downstream = 3 nodes
+        assert len(response.nodes) == 3
         assert len(response.edges) == 2
-        assert response.statistics.total_nodes == 2
+        assert response.statistics.total_nodes == 3
         assert response.statistics.total_edges == 2
 
     @pytest.mark.asyncio
@@ -453,8 +460,8 @@ class TestQueryDependencySubgraphUseCase:
         # Act
         response = await use_case.execute(request)
 
-        # Assert
-        assert response.statistics.total_nodes == 2
+        # Assert - root service + 2 downstream = 3 nodes
+        assert response.statistics.total_nodes == 3
         assert response.statistics.total_edges == 2
         assert response.statistics.downstream_services == 2
         assert response.statistics.upstream_services == 0

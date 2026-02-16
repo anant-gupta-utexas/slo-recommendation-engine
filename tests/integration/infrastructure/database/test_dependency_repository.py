@@ -402,7 +402,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse 1 hop from api-gateway
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["api-gateway"].id,
             direction=TraversalDirection.DOWNSTREAM,
             max_depth=1,
@@ -410,10 +410,10 @@ class TestDependencyRepository:
         )
 
         # Assert
-        assert len(result["services"]) == 1  # Only auth-service
-        assert result["services"][0].id == sample_services["auth-service"].id
-        assert len(result["edges"]) == 1
-        assert result["edges"][0].target_service_id == sample_services["auth-service"].id
+        assert len(services) == 1  # Only auth-service
+        assert services[0].id == sample_services["auth-service"].id
+        assert len(edges) == 1
+        assert edges[0].target_service_id == sample_services["auth-service"].id
 
     async def test_traverse_graph_downstream_multi_hop(
         self,
@@ -448,7 +448,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse 3 hops from api-gateway
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["api-gateway"].id,
             direction=TraversalDirection.DOWNSTREAM,
             max_depth=3,
@@ -456,12 +456,12 @@ class TestDependencyRepository:
         )
 
         # Assert - Should find all 3 downstream services
-        assert len(result["services"]) == 3
-        service_ids = {s.id for s in result["services"]}
+        assert len(services) == 3
+        service_ids = {s.id for s in services}
         assert sample_services["auth-service"].id in service_ids
         assert sample_services["user-service"].id in service_ids
         assert sample_services["order-service"].id in service_ids
-        assert len(result["edges"]) == 3
+        assert len(edges) == 3
 
     async def test_traverse_graph_upstream(
         self,
@@ -491,7 +491,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse upstream from user-service
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["user-service"].id,
             direction=TraversalDirection.UPSTREAM,
             max_depth=2,
@@ -499,11 +499,11 @@ class TestDependencyRepository:
         )
 
         # Assert - Should find both upstream services
-        assert len(result["services"]) == 2
-        service_ids = {s.id for s in result["services"]}
+        assert len(services) == 2
+        service_ids = {s.id for s in services}
         assert sample_services["api-gateway"].id in service_ids
         assert sample_services["auth-service"].id in service_ids
-        assert len(result["edges"]) == 2
+        assert len(edges) == 2
 
     async def test_traverse_graph_bidirectional(
         self,
@@ -539,7 +539,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse bidirectionally from auth-service
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["auth-service"].id,
             direction=TraversalDirection.BOTH,
             max_depth=1,
@@ -547,12 +547,12 @@ class TestDependencyRepository:
         )
 
         # Assert - Should find upstream and downstream neighbors
-        assert len(result["services"]) == 3
-        service_ids = {s.id for s in result["services"]}
+        assert len(services) == 3
+        service_ids = {s.id for s in services}
         assert sample_services["api-gateway"].id in service_ids  # Upstream
         assert sample_services["order-service"].id in service_ids  # Upstream
         assert sample_services["user-service"].id in service_ids  # Downstream
-        assert len(result["edges"]) == 3
+        assert len(edges) == 3
 
     async def test_traverse_graph_cycle_prevention(
         self,
@@ -587,7 +587,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse with high depth limit
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["api-gateway"].id,
             direction=TraversalDirection.DOWNSTREAM,
             max_depth=10,
@@ -595,8 +595,10 @@ class TestDependencyRepository:
         )
 
         # Assert - Should visit each service only once
-        assert len(result["services"]) == 2  # auth-service, user-service
-        assert len(result["edges"]) == 3  # All 3 edges in cycle
+        assert len(services) == 2  # auth-service, user-service
+        # With cycle prevention, the back-edge (user-service -> api-gateway)
+        # is not traversed because api-gateway is already in the path
+        assert len(edges) == 2
 
     async def test_traverse_graph_exclude_stale_edges(
         self,
@@ -627,7 +629,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse excluding stale edges
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["api-gateway"].id,
             direction=TraversalDirection.DOWNSTREAM,
             max_depth=1,
@@ -635,8 +637,8 @@ class TestDependencyRepository:
         )
 
         # Assert - Should only find auth-service
-        assert len(result["services"]) == 1
-        assert result["services"][0].id == sample_services["auth-service"].id
+        assert len(services) == 1
+        assert services[0].id == sample_services["auth-service"].id
 
     async def test_traverse_graph_include_stale_edges(
         self,
@@ -667,7 +669,7 @@ class TestDependencyRepository:
         await repository.bulk_upsert(dependencies)
 
         # Act - Traverse including stale edges
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=sample_services["api-gateway"].id,
             direction=TraversalDirection.DOWNSTREAM,
             max_depth=1,
@@ -675,8 +677,8 @@ class TestDependencyRepository:
         )
 
         # Assert - Should find both services
-        assert len(result["services"]) == 2
-        service_ids = {s.id for s in result["services"]}
+        assert len(services) == 2
+        service_ids = {s.id for s in services}
         assert sample_services["auth-service"].id in service_ids
         assert sample_services["user-service"].id in service_ids
 
@@ -826,7 +828,7 @@ class TestDependencyRepositoryPerformance:
 
         # Act - Measure traversal time
         start_time = time.perf_counter()
-        result = await repository.traverse_graph(
+        services, edges = await repository.traverse_graph(
             service_id=created_services[0].id,
             direction=TraversalDirection.DOWNSTREAM,
             max_depth=3,
@@ -835,8 +837,8 @@ class TestDependencyRepositoryPerformance:
         elapsed_ms = (time.perf_counter() - start_time) * 1000
 
         # Assert
-        assert len(result["services"]) > 0
-        assert len(result["edges"]) > 0
+        assert len(services) > 0
+        assert len(edges) > 0
         # Performance assertion - should be fast even with 100 nodes
         # With 5000 nodes, target is <100ms
         assert elapsed_ms < 500, f"Traversal took {elapsed_ms:.2f}ms (expected <500ms)"

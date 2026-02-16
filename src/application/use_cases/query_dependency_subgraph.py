@@ -94,6 +94,11 @@ class QueryDependencySubgraphUseCase:
             include_stale=request.include_stale,
         )
 
+        # Ensure the root service is always included in the results
+        root_in_nodes = any(n.id == service.id for n in nodes)
+        if not root_in_nodes:
+            nodes = [service] + list(nodes)
+
         # Map domain entities to DTOs
         node_dtos = [
             ServiceNodeDTO(
@@ -122,35 +127,40 @@ class QueryDependencySubgraphUseCase:
             for edge in edges
         ]
 
-        # Compute statistics
+        # Compute statistics: count unique services excluding the starting service
         upstream_count = 0
         downstream_count = 0
 
-        if request.direction == "upstream":
-            upstream_count = len(nodes)  # Starting service not in returned nodes
-        elif request.direction == "downstream":
-            downstream_count = len(nodes)
-        else:  # both
-            # Count based on edge directions relative to starting service
-            for edge in edges:
-                source_id = self._get_service_id_from_uuid(
-                    edge.source_service_id, nodes
-                )
-                target_id = self._get_service_id_from_uuid(
-                    edge.target_service_id, nodes
-                )
+        # Collect unique upstream and downstream service IDs from edges
+        upstream_service_ids: set[str] = set()
+        downstream_service_ids: set[str] = set()
 
-                if source_id == request.service_id:
-                    downstream_count += 1
-                if target_id == request.service_id:
-                    upstream_count += 1
+        for edge in edges:
+            source_id = self._get_service_id_from_uuid(
+                edge.source_service_id, nodes
+            )
+            target_id = self._get_service_id_from_uuid(
+                edge.target_service_id, nodes
+            )
+
+            if request.direction in ("downstream", "both"):
+                # Target services in edges are downstream
+                if target_id != request.service_id:
+                    downstream_service_ids.add(target_id)
+            if request.direction in ("upstream", "both"):
+                # Source services in edges are upstream
+                if source_id != request.service_id:
+                    upstream_service_ids.add(source_id)
+
+        upstream_count = len(upstream_service_ids)
+        downstream_count = len(downstream_service_ids)
 
         statistics = SubgraphStatistics(
             total_nodes=len(nodes),
             total_edges=len(edges),
             upstream_services=upstream_count,
             downstream_services=downstream_count,
-            max_depth_reached=request.depth,  # Simplified: assume max depth reached
+            max_depth_reached=request.depth,
         )
 
         return DependencySubgraphResponse(

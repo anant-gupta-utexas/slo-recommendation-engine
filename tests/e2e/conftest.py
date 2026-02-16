@@ -14,15 +14,15 @@ from src.infrastructure.database.config import init_db, dispose_db, get_session_
 from src.infrastructure.database.models import ApiKeyModel
 
 
-# Module-level flag to track if DB has been initialized
-_db_initialized = False
-
-
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def ensure_database():
-    """Ensure database is initialized before each test."""
-    global _db_initialized
+    """Ensure database is initialized before each test.
 
+    Re-initializes the connection pool for each test to avoid
+    'Future attached to a different loop' errors when pytest-asyncio
+    creates a new event loop per test function.
+    Also resets the in-memory rate limiter to prevent cross-test interference.
+    """
     # Set up environment
     test_db_url = os.getenv(
         "DATABASE_URL",
@@ -30,14 +30,26 @@ async def ensure_database():
     )
     os.environ["DATABASE_URL"] = test_db_url
 
-    # Initialize database if not already done
-    if not _db_initialized:
-        await init_db()
-        _db_initialized = True
+    # Always re-initialize: each test gets a fresh event loop,
+    # so the connection pool must be recreated to match.
+    await dispose_db()
+    await init_db()
+
+    # Reset rate limiter state so tests don't interfere with each other
+    for middleware in app.user_middleware:
+        if hasattr(middleware, "cls") and middleware.cls.__name__ == "RateLimitMiddleware":
+            break
+    # Walk the middleware stack to find the RateLimitMiddleware instance
+    current = app.middleware_stack
+    while current is not None:
+        if hasattr(current, "buckets"):
+            current.buckets.clear()
+            break
+        current = getattr(current, "app", None)
 
     yield
 
-    # Note: We don't dispose here to avoid reinitializing for each test
+    await dispose_db()
 
 
 @pytest_asyncio.fixture(scope="function")

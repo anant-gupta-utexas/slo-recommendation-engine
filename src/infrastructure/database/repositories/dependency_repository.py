@@ -9,8 +9,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 from uuid import UUID
 
-from sqlalchemy import and_, cast, func, literal_column, or_, select, text, update
-from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
+from sqlalchemy import and_, bindparam, func, literal_column, select, type_coerce, update
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, array, insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.service import Service
@@ -218,7 +218,7 @@ class DependencyRepository(DependencyRepositoryInterface):
             span.set_attribute("graph.services_count", len(services))
             span.set_attribute("graph.edges_count", len(edges))
 
-            return {"services": services, "edges": edges}
+            return (services, edges)
 
     async def _traverse_downstream(
         self, service_id: UUID, max_depth: int, include_stale: bool
@@ -241,9 +241,15 @@ class DependencyRepository(DependencyRepositoryInterface):
             else literal_column("true")
         )
 
-        # Create initial path array using raw SQL
-        # PostgreSQL ARRAY constructor with bind parameter
-        initial_path = literal_column(f"ARRAY['{service_id}'::uuid, service_dependencies.target_service_id]")
+        # Create initial path array using parameterized bind (avoids SQL injection)
+        start_id_param = type_coerce(
+            bindparam("start_id_down", value=service_id),
+            PG_UUID(as_uuid=True),
+        )
+        initial_path = array([
+            start_id_param,
+            ServiceDependencyModel.target_service_id,
+        ])
 
         base_query = (
             select(
@@ -260,7 +266,7 @@ class DependencyRepository(DependencyRepositoryInterface):
             .cte(name="dependency_tree", recursive=True)
         )
 
-        # Recursive case: Transitive dependencies
+        # Recursive case: Transitive dependencies with cycle prevention
         recursive_query = (
             select(
                 ServiceDependencyModel,
@@ -279,6 +285,10 @@ class DependencyRepository(DependencyRepositoryInterface):
                 and_(
                     base_query.c.depth < max_depth,
                     stale_condition,
+                    # Cycle prevention: don't revisit nodes already in path
+                    # Uses ANY() instead of subquery since PostgreSQL forbids
+                    # recursive CTE references inside subqueries
+                    ServiceDependencyModel.target_service_id != func.all_(base_query.c.path),
                 )
             )
         )
@@ -340,9 +350,15 @@ class DependencyRepository(DependencyRepositoryInterface):
             else literal_column("true")
         )
 
-        # Create initial path for upstream: [source_service_id, service_id]
-        # Use raw SQL with PostgreSQL ARRAY constructor
-        initial_path_upstream = literal_column(f"ARRAY[service_dependencies.source_service_id, '{service_id}'::uuid]")
+        # Create initial path for upstream using parameterized bind (avoids SQL injection)
+        start_id_param_up = type_coerce(
+            bindparam("start_id_up", value=service_id),
+            PG_UUID(as_uuid=True),
+        )
+        initial_path_upstream = array([
+            ServiceDependencyModel.source_service_id,
+            start_id_param_up,
+        ])
 
         base_query = (
             select(
@@ -359,7 +375,7 @@ class DependencyRepository(DependencyRepositoryInterface):
             .cte(name="dependency_tree", recursive=True)
         )
 
-        # Recursive case: Transitive dependencies (upstream)
+        # Recursive case: Transitive dependencies (upstream) with cycle prevention
         recursive_query = (
             select(
                 ServiceDependencyModel,
@@ -378,6 +394,8 @@ class DependencyRepository(DependencyRepositoryInterface):
                 and_(
                     base_query.c.depth < max_depth,
                     stale_condition,
+                    # Cycle prevention: don't revisit nodes already in path
+                    ServiceDependencyModel.source_service_id != func.all_(base_query.c.path),
                 )
             )
         )
@@ -442,7 +460,7 @@ class DependencyRepository(DependencyRepositoryInterface):
             Service(
                 id=model.id,
                 service_id=model.service_id,
-                metadata=model.metadata,
+                metadata=model.metadata_,
                 criticality=Criticality(model.criticality),
                 team=model.team,
                 discovered=model.discovered,

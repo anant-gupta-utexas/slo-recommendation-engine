@@ -10,9 +10,7 @@ from src.application.use_cases.ingest_dependency_graph import (
     IngestDependencyGraphUseCase,
 )
 from src.infrastructure.database.config import get_session_factory
-from src.infrastructure.database.repositories.circular_dependency_alert_repository import (
-    CircularDependencyAlertRepository,
-)
+from src.domain.services.edge_merge_service import EdgeMergeService
 from src.infrastructure.database.repositories.dependency_repository import (
     DependencyRepository,
 )
@@ -56,12 +54,12 @@ async def ingest_otel_service_graph() -> None:
         async with session_factory() as session:
             service_repo = ServiceRepository(session)
             dependency_repo = DependencyRepository(session)
-            alert_repo = CircularDependencyAlertRepository(session)
+            edge_merge_service = EdgeMergeService()
 
             use_case = IngestDependencyGraphUseCase(
                 service_repository=service_repo,
                 dependency_repository=dependency_repo,
-                alert_repository=alert_repo,
+                edge_merge_service=edge_merge_service,
             )
 
             # Execute ingestion

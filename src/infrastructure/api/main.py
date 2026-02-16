@@ -80,8 +80,8 @@ def create_app() -> FastAPI:
     # CORS middleware (should be first)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # TODO: Configure from settings
-        allow_credentials=True,
+        allow_origins=["*"],  # TODO: Configure from settings for production
+        allow_credentials=False,  # Cannot use credentials with wildcard origins
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -113,7 +113,7 @@ def create_app() -> FastAPI:
     async def http_exception_handler(request, exc: HTTPException):
         """Convert HTTPException to RFC 7807 Problem Details."""
         import uuid
-        correlation_id = str(uuid.uuid4())
+        correlation_id = getattr(request.state, "correlation_id", None) or str(uuid.uuid4())
 
         # Map status code to title
         status_texts = {
@@ -150,7 +150,7 @@ def create_app() -> FastAPI:
     async def validation_exception_handler(request, exc: RequestValidationError):
         """Convert Pydantic validation errors to RFC 7807 Problem Details."""
         import uuid
-        correlation_id = str(uuid.uuid4())
+        correlation_id = getattr(request.state, "correlation_id", None) or str(uuid.uuid4())
 
         problem = ProblemDetails(
             type="about:blank",

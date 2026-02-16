@@ -12,72 +12,88 @@ class CircularDependencyDetector:
 
     Time Complexity: O(V + E) where V = services, E = edges
     Space Complexity: O(V)
+
+    The detector is reusable: each call to detect_cycles() resets internal state.
+    Uses an iterative implementation to avoid Python's recursion limit.
     """
 
-    def __init__(self):
-        """Initialize the detector state."""
-        self.index_counter = 0
-        self.stack: list[UUID] = []
-        self.lowlinks: dict[UUID, int] = {}
-        self.index: dict[UUID, int] = {}
-        self.on_stack: set[UUID] = set()
-        self.sccs: list[list[UUID]] = []
+    def __init__(self) -> None:
+        """Initialize the detector."""
+        pass
 
-    async def detect_cycles(
+    def detect_cycles(
         self, adjacency_list: dict[UUID, list[UUID]]
     ) -> list[list[UUID]]:
         """Detect all strongly connected components (cycles) in the graph.
 
         Args:
-            adjacency_list: Map of service_id → list of target service_ids
+            adjacency_list: Map of service_id -> list of target service_ids
 
         Returns:
             List of cycles, where each cycle is a list of service UUIDs.
             Only returns SCCs with size > 1 (actual cycles, not single nodes)
         """
-        for node in adjacency_list.keys():
-            if node not in self.index:
-                await self._strongconnect(node, adjacency_list)
+        # Reset all state for each invocation (makes detector reusable)
+        index_counter = 0
+        stack: list[UUID] = []
+        lowlinks: dict[UUID, int] = {}
+        index: dict[UUID, int] = {}
+        on_stack: set[UUID] = set()
+        sccs: list[list[UUID]] = []
+
+        # Iterative Tarjan's algorithm using an explicit call stack
+        # Each frame is (node, successor_index, is_root_call)
+        for start_node in adjacency_list.keys():
+            if start_node in index:
+                continue
+
+            # Explicit call stack: each entry is (node, successor_iterator_index)
+            call_stack: list[tuple[UUID, int]] = [(start_node, 0)]
+
+            while call_stack:
+                node, si = call_stack[-1]
+
+                if si == 0 and node not in index:
+                    # First visit: initialize this node
+                    index[node] = index_counter
+                    lowlinks[node] = index_counter
+                    index_counter += 1
+                    stack.append(node)
+                    on_stack.add(node)
+
+                successors = adjacency_list.get(node, [])
+
+                if si < len(successors):
+                    # Process next successor
+                    call_stack[-1] = (node, si + 1)
+                    successor = successors[si]
+
+                    if successor not in index:
+                        # Successor not yet visited: push it onto call stack
+                        call_stack.append((successor, 0))
+                    elif successor in on_stack:
+                        # Successor is on stack: update lowlink
+                        lowlinks[node] = min(lowlinks[node], index[successor])
+                else:
+                    # All successors processed: check if this is an SCC root
+                    call_stack.pop()
+
+                    if lowlinks[node] == index[node]:
+                        # Node is root of an SCC: pop stack to get SCC members
+                        scc: list[UUID] = []
+                        while True:
+                            w = stack.pop()
+                            on_stack.remove(w)
+                            scc.append(w)
+                            if w == node:
+                                break
+                        sccs.append(scc)
+
+                    # Update parent's lowlink
+                    if call_stack:
+                        parent = call_stack[-1][0]
+                        lowlinks[parent] = min(lowlinks[parent], lowlinks[node])
 
         # Filter out trivial SCCs (single nodes)
-        cycles = [scc for scc in self.sccs if len(scc) > 1]
+        cycles = [scc for scc in sccs if len(scc) > 1]
         return cycles
-
-    async def _strongconnect(
-        self, node: UUID, adjacency_list: dict[UUID, list[UUID]]
-    ):
-        """Recursive helper for Tarjan's algorithm.
-
-        Args:
-            node: Current node being processed
-            adjacency_list: Complete graph as adjacency list
-        """
-        # Set the depth index for node to the smallest unused index
-        self.index[node] = self.index_counter
-        self.lowlinks[node] = self.index_counter
-        self.index_counter += 1
-        self.stack.append(node)
-        self.on_stack.add(node)
-
-        # Consider successors of node
-        for successor in adjacency_list.get(node, []):
-            if successor not in self.index:
-                # Successor has not yet been visited; recurse on it
-                await self._strongconnect(successor, adjacency_list)
-                self.lowlinks[node] = min(
-                    self.lowlinks[node], self.lowlinks[successor]
-                )
-            elif successor in self.on_stack:
-                # Successor is in stack and hence in the current SCC
-                self.lowlinks[node] = min(self.lowlinks[node], self.index[successor])
-
-        # If node is a root node, pop the stack and generate an SCC
-        if self.lowlinks[node] == self.index[node]:
-            scc = []
-            while True:
-                w = self.stack.pop()
-                self.on_stack.remove(w)
-                scc.append(w)
-                if w == node:
-                    break
-            self.sccs.append(scc)

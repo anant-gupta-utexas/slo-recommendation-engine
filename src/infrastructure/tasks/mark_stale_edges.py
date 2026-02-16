@@ -5,7 +5,6 @@ them as stale. Stale edges can be filtered out from query results.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.database.config import get_session_factory
@@ -30,15 +29,9 @@ async def mark_stale_edges_task() -> None:
         settings = get_settings()
         threshold_hours = settings.background_tasks.stale_edge_threshold_hours
 
-        # Calculate threshold timestamp
-        threshold_timestamp = datetime.now(timezone.utc) - timedelta(
-            hours=threshold_hours
-        )
-
         logger.info(
             "Marking edges as stale",
             threshold_hours=threshold_hours,
-            threshold_timestamp=threshold_timestamp.isoformat(),
         )
 
         # Initialize repository and mark stale edges
@@ -46,9 +39,9 @@ async def mark_stale_edges_task() -> None:
         async with session_factory() as session:
             dependency_repo = DependencyRepository(session)
 
-            # Mark edges that haven't been observed since threshold
+            # Mark edges that haven't been observed within threshold hours
             updated_count = await dependency_repo.mark_stale_edges(
-                threshold_timestamp=threshold_timestamp
+                staleness_threshold_hours=threshold_hours
             )
 
             await session.commit()
