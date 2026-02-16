@@ -1,0 +1,80 @@
+# Staging environment overrides for slo-engine Helm chart
+
+global:
+  environment: staging
+
+# Smaller replica count for staging
+replicaCount: 2
+
+# Use staging image tag
+image:
+  repository: ghcr.io/your-org/slo-engine
+  tag: "staging-latest"
+  pullPolicy: Always
+
+# Staging ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/rate-limit: "50"
+  hosts:
+    - host: slo-engine-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: slo-engine-staging-tls
+      hosts:
+        - slo-engine-staging.example.com
+
+# Reduced resources for staging
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+# Autoscaling disabled in staging (use fixed replicas)
+autoscaling:
+  enabled: false
+
+# Staging configuration
+config:
+  database:
+    url: "postgresql+asyncpg://slo_user:CHANGEME@postgres-staging:5432/slo_engine_staging"
+    poolSize: 10
+    maxOverflow: 5
+
+  redis:
+    url: "redis://redis-staging:6379/0"
+    cacheTtl: 300
+
+  observability:
+    logLevel: "DEBUG"
+    traceSampleRate: 0.5  # Higher sampling in staging
+    otlpEndpoint: "http://otel-collector-staging:4318"
+
+  prometheus:
+    url: "http://prometheus-staging:9090"
+
+  backgroundTasks:
+    otelGraphIngestIntervalMinutes: 5  # More frequent for testing
+    staleEdgeThresholdHours: 24  # Shorter threshold for testing
+
+# Secrets (override with actual values via external secrets)
+secrets:
+  databaseUrl: ""  # Managed by external secrets operator
+  redisUrl: ""  # Managed by external secrets operator
+
+# Service monitor for Prometheus (if using Prometheus Operator)
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+# Network policy (more permissive in staging)
+networkPolicy:
+  enabled: false
