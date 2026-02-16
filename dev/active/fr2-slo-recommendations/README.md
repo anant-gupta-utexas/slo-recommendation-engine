@@ -1,7 +1,7 @@
 # FR-2: SLO Recommendation Generation
 
-**Feature Status:** 🟡 In Progress (30% overall, Phase 1 at 67%)
-**Last Updated:** 2026-02-15 (Session 3)
+**Feature Status:** 🟢 Phase 1 Complete (46% overall, Phase 1 at 100%)
+**Last Updated:** 2026-02-15 (Session 4)
 
 ---
 
@@ -14,22 +14,26 @@ pytest tests/unit/domain/entities/ -v
 pytest tests/unit/domain/services/ -v
 ```
 
-**Expected:** 113 tests passing, 0 failures, 100% coverage
+**Expected:** 167 tests passing, 0 failures, 97-100% coverage
 
 ---
 
 ## Current State
 
-### Completed ✅
+### Phase 1: Domain Foundation ✅ **COMPLETE**
 - **Task 1.1:** SLO Recommendation Entity (32 tests, 100% coverage)
 - **Task 1.2:** SLI Data Value Objects (24 tests, 100% coverage)
 - **Task 1.3:** Availability Calculator Service (31 tests, 100% coverage)
-- **Task 1.4:** Latency Calculator Service (26 tests, 98% coverage) ⭐ NEW
+- **Task 1.4:** Latency Calculator Service (26 tests, 98% coverage)
+- **Task 1.5:** Composite Availability Service (26 tests, 97% coverage) ⭐ NEW
+- **Task 1.6:** Weighted Attribution Service (28 tests, 100% coverage) ⭐ NEW
 - **Task 1.7:** Repository Interfaces
 
-### Next Up ⏭️
-- **Task 1.5:** Composite Availability Service (NEXT)
-- **Task 1.6:** Weighted Attribution Service
+### Phase 2: Application Layer ⏭️ **NEXT**
+- **Task 2.1:** SLO Recommendation DTOs (NEXT)
+- **Task 2.2:** GenerateSloRecommendation Use Case
+- **Task 2.3:** GetSloRecommendation Use Case
+- **Task 2.4:** BatchComputeRecommendations Use Case
 
 ---
 
@@ -56,7 +60,7 @@ dev/active/fr2-slo-recommendations/
 - **Error Budget:** Monthly minutes calculation
 - **Confidence Intervals:** Bootstrap resampling (1000 iterations)
 
-### Latency Calculator ⭐ NEW
+### Latency Calculator
 - **Tier Strategy:** Percentile-based with noise margins
   - Conservative: p999 + noise margin
   - Balanced: p99 + noise margin
@@ -64,6 +68,18 @@ dev/active/fr2-slo-recommendations/
 - **Noise Margins:** 5% default, 10% for shared infrastructure
 - **Breach Probability:** Historical percentile comparison to threshold
 - **Confidence Intervals:** Bootstrap resampling (1000 iterations)
+
+### Composite Availability Service ⭐ NEW
+- **Serial Dependencies:** R = R_self × ∏R_dep_i
+- **Parallel Redundancy:** R = 1 - ∏(1 - R_replica_j)
+- **Bottleneck Identification:** Weakest link in dependency chain
+- **Soft Dependencies:** Excluded from composite bound
+
+### Weighted Attribution Service ⭐ NEW
+- **Availability Weights:** historical (0.40), dependency risk (0.30), external (0.15), deployment (0.15)
+- **Latency Weights:** p99 (0.50), call chain (0.22), noisy neighbor (0.15), seasonality (0.13)
+- **Normalization:** Contributions sum to 1.0
+- **Sorting:** By absolute contribution descending
 
 ### Key Design Decisions
 - Mock Prometheus for parallel development (real integration in FR-6)
@@ -82,25 +98,24 @@ dev/active/fr2-slo-recommendations/
 - `DependencyRepository` interface
 - `GraphTraversalService`
 
-### New FR-2 Components
+### New FR-2 Components (Phase 1 Complete)
 - `SloRecommendation` entity ✅
 - `AvailabilitySliData` / `LatencySliData` ✅
 - `AvailabilityCalculator` ✅
-- `LatencyCalculator` ✅ ⭐ NEW
+- `LatencyCalculator` ✅
+- `CompositeAvailabilityService` ✅ ⭐ NEW
+- `WeightedAttributionService` ✅ ⭐ NEW
 - Repository interfaces ✅
 
 ---
 
 ## Next Session Actions
 
-1. **Implement Composite Availability Service** (Task 1.5) ⏭️ NEXT
-   - Serial composition: R = R_self * ∏R_dep
-   - Parallel composition: R = 1 - ∏(1 - R_replica)
-   - Bottleneck identification
-
-3. **Implement Weighted Attribution** (Task 1.6)
-   - Fixed weights for availability/latency
-   - Normalization to sum = 1.0
+1. **Start Phase 2: Application Layer** ⏭️ NEXT
+   - Task 2.1: Create SLO Recommendation DTOs (11 dataclasses)
+   - Task 2.2: Implement GenerateSloRecommendation Use Case
+   - Task 2.3: Implement GetSloRecommendation Use Case
+   - Task 2.4: Implement BatchComputeRecommendations Use Case
 
 ---
 
@@ -134,36 +149,46 @@ pytest tests/unit/domain/services/test_availability_calculator.py -v
 
 ---
 
-**Last Session:** Session 3 (2026-02-15)
-**Progress:** Phase 1 Domain Foundation - 67% complete
-**Next Goal:** Complete remaining domain services (Tasks 1.5, 1.6)
+**Last Session:** Session 4 (2026-02-15)
+**Progress:** Phase 1 Domain Foundation - ✅ **100% COMPLETE**
+**Next Goal:** Start Phase 2 (Application Layer - DTOs and Use Cases)
 
 ---
 
-## Handoff Notes (Session 3 → Session 4)
+## Handoff Notes (Session 4 → Session 5)
 
-**Just Completed:**
-- ✅ Task 1.4: Latency Calculator Service
-- Files: `src/domain/services/latency_calculator.py` (57 lines, 98% coverage)
-- Tests: `tests/unit/domain/services/test_latency_calculator.py` (26 tests, all passing)
+**Just Completed (Session 4):**
+- ✅ Task 1.5: Composite Availability Service
+  - Files: `src/domain/services/composite_availability_service.py` (73 lines, 97% coverage)
+  - Tests: `tests/unit/domain/services/test_composite_availability_service.py` (26 tests)
+  - Features: Serial/parallel composition, bottleneck identification, soft dep exclusion
+
+- ✅ Task 1.6: Weighted Attribution Service
+  - Files: `src/domain/services/weighted_attribution_service.py` (55 lines, 100% coverage)
+  - Tests: `tests/unit/domain/services/test_weighted_attribution_service.py` (28 tests)
+  - Features: Heuristic weights, normalization, sorting by contribution
 
 **Current State:**
-- 113 tests passing, 0 failures
-- 100% coverage on all implemented FR-2 domain code
-- Phase 1 is 67% complete (5/7 tasks done)
+- ✅ Phase 1 Complete: 167 tests passing, 0 failures
+- 97-100% coverage on all FR-2 domain layer components
+- All 6 domain tasks complete + repository interfaces
 
 **Next Immediate Task:**
-- **Task 1.5: Composite Availability Service**
-- File to create: `src/domain/services/composite_availability_service.py`
-- Test to create: `tests/unit/domain/services/test_composite_availability_service.py`
-- Algorithm: Serial hard deps: `R = R_self * product(R_dep_i)`
-- Algorithm: Parallel replicas: `R = 1 - product(1 - R_replica_j)`
-- Must identify bottlenecks (lowest availability dependency)
-- Soft dependencies excluded from calculation
+- **Task 2.1: SLO Recommendation DTOs** (Phase 2 start)
+- File to create: `src/application/dtos/slo_recommendation_dto.py`
+- Test to create: `tests/unit/application/dtos/test_slo_recommendation_dto.py`
+- Create 11 DTO dataclasses:
+  - Request DTOs: `GenerateSloRequest`, `GetSloRequest`, `BatchComputeRequest`
+  - Response DTOs: `SloRecommendationResponse`, `TierResponse`, `ExplanationResponse`, `DependencyImpactResponse`, `DataQualityResponse`, `FeatureAttributionResponse`
+  - Result DTOs: `BatchComputeResult`, `FailureDetail`
+
+**Reference:**
+- See `fr2-plan.md` section 3.4 for DTO specifications
+- Follow FR-1 DTO patterns in `src/application/dtos/dependency_graph_dto.py`
 
 **Verification Command:**
 ```bash
 source .venv/bin/activate
 pytest tests/unit/domain/ -v
-# Expected: 113 tests passing, 0 failures, 100% coverage
+# Expected: 262 tests passing (167 FR-2 + 95 FR-1), 0 failures
 ```

@@ -50,26 +50,26 @@
     - [x] Breach probabilities estimated from percentile positions
     - [x] >95% unit test coverage (26 tests, 98% coverage)
 
-- [ ] **Task 1.5: Composite Availability Service** [Effort: L]
+- [x] **Task 1.5: Composite Availability Service** [Effort: L] ✅ **COMPLETE**
   - Files: `src/domain/services/composite_availability_service.py`, `tests/unit/domain/services/test_composite_availability_service.py`
   - Dependencies: Task 1.1, Task 1.2
   - Acceptance:
-    - [ ] Serial hard: `R = R_self * product(R_dep_i)`
-    - [ ] Parallel: `R = 1 - product(1 - R_replica_j)`
-    - [ ] Soft deps excluded, counted in metadata
-    - [ ] Bottleneck identification correct
-    - [ ] Edge cases: no deps, all soft, single dep, very low availability
-    - [ ] >95% unit test coverage
+    - [x] Serial hard: `R = R_self * product(R_dep_i)`
+    - [x] Parallel: `R = 1 - product(1 - R_replica_j)`
+    - [x] Soft deps excluded, counted in metadata
+    - [x] Bottleneck identification correct
+    - [x] Edge cases: no deps, all soft, single dep, very low availability
+    - [x] >95% unit test coverage (26 tests, 97% coverage)
 
-- [ ] **Task 1.6: Weighted Attribution Service** [Effort: M]
+- [x] **Task 1.6: Weighted Attribution Service** [Effort: M] ✅ **COMPLETE**
   - Files: `src/domain/services/weighted_attribution_service.py`, `tests/unit/domain/services/test_weighted_attribution_service.py`
   - Dependencies: Task 1.1
   - Acceptance:
-    - [ ] Availability weights: 0.40 / 0.30 / 0.15 / 0.15
-    - [ ] Latency weights: 0.50 / 0.22 / 0.15 / 0.13
-    - [ ] Normalized to sum = 1.0
-    - [ ] Sorted by absolute contribution descending
-    - [ ] >95% unit test coverage
+    - [x] Availability weights: 0.40 / 0.30 / 0.15 / 0.15
+    - [x] Latency weights: 0.50 / 0.22 / 0.15 / 0.13
+    - [x] Normalized to sum = 1.0
+    - [x] Sorted by absolute contribution descending
+    - [x] >95% unit test coverage (28 tests, 100% coverage)
 
 - [x] **Task 1.7: Repository Interfaces** [Effort: S] ✅ **COMPLETE**
   - Files: `src/domain/repositories/slo_recommendation_repository.py`, `src/domain/repositories/telemetry_query_service.py`
@@ -82,10 +82,10 @@
 
 ### Phase 1 Checklist
 - [x] All entities created with validation ✅
-- [ ] 4 computation services with >95% test coverage (2/4 complete)
+- [x] 4 computation services with >95% test coverage (4/4 complete) ✅
 - [x] 2 repository interfaces defined ✅
-- [x] All unit tests passing (113/113 tests) ✅
-- **Total Phase 1 tests: 113 passing (67% complete)**
+- [x] All unit tests passing (167/167 tests) ✅
+- **Total Phase 1 tests: 167 passing (100% complete)** ✅
 
 ---
 
@@ -278,71 +278,13 @@
 
 | Phase | Status | Tests Passing | Coverage |
 |-------|--------|--------------|----------|
-| Phase 1: Domain | 🟡 In Progress (67%) | 113/~150 | 100% (implemented code) |
-| Phase 2: Application | ⬜ Not Started | 0/0 | — |
-| Phase 3: Infrastructure (DB + Telemetry) | ⬜ Not Started | 0/0 | — |
-| Phase 4: Infrastructure (API + Tasks) | ⬜ Not Started | 0/0 | — |
-| **Total** | **🟡 In Progress (30%)** | **113/~600** | **—** |
+| Phase 1: Domain | ✅ Complete (100%) | 167/167 | 97-100% |
+| Phase 2: Application | ⬜ Not Started | 0/~60 | — |
+| Phase 3: Infrastructure (DB + Telemetry) | ⬜ Not Started | 0/~80 | — |
+| Phase 4: Infrastructure (API + Tasks) | ⬜ Not Started | 0/~60 | — |
+| **Total** | **🟢 Phase 1 Complete** | **167/~367** | **46%** |
 
 ---
 
-## Session Log
-
-### Session 1 (2026-02-15): Planning
-- Created FR-2 plan, context, and task documents
-- Key decisions documented: mock Prometheus, weighted attribution, pre-compute, extended lookback, percentile + cap
-- No blockers identified
-
-### Session 2 (2026-02-15): Phase 1 Implementation - Domain Foundation (Partial)
-**Completed Tasks:**
-- ✅ Task 1.1: SLO Recommendation Entity (32 tests, 100% coverage)
-- ✅ Task 1.2: SLI Data Value Objects (24 tests, 100% coverage)
-- ✅ Task 1.3: Availability Calculator Service (31 tests, 100% coverage)
-- ✅ Task 1.7: Repository Interfaces (no tests, interface definitions)
-
-**Key Implementations:**
-- `SloRecommendation` entity with auto-expiry, validation, `supersede()`, `expire()`, `is_expired` methods
-- `AvailabilitySliData` and `LatencySliData` value objects with full validation
-- `AvailabilityCalculator` with sophisticated tier computation:
-  - Percentile-based targets (p99.9, p99, p95)
-  - Composite bound capping for Conservative/Balanced tiers
-  - Aggressive tier NOT capped (design decision to show achievable potential)
-  - Breach probability estimation from historical windows
-  - Error budget calculation in monthly minutes
-  - Bootstrap confidence intervals (1000 resamples)
-  - Edge case handling: single data point, 100% availability, 0% availability
-- Repository interfaces for SLO recommendations and telemetry queries
-
-**Testing:**
-- 87 unit tests passing, 0 failures
-- 100% code coverage on all implemented domain layer components
-- Comprehensive edge case coverage
-- Known-answer test vectors for mathematical correctness
-
-**Session 3 Additions:**
-- ✅ Task 1.4: Latency Calculator Service (26 tests, 98% coverage)
-
-**Key Implementations (Session 3):**
-- `LatencyCalculator` with percentile-based tier computation:
-  - Conservative tier: p999 + noise margin (5% default, 10% shared infra)
-  - Balanced tier: p99 + noise margin
-  - Aggressive tier: p95 (no noise margin - achievable under normal conditions)
-  - Breach probability estimation comparing historical values to thresholds
-  - Bootstrap confidence intervals (1000 resamples, same as availability calculator)
-  - Edge case handling: single data point, uniform data, high variability spikes
-
-**Testing:**
-- 113 unit tests passing, 0 failures
-- 100% code coverage on all implemented domain layer components
-- Comprehensive edge case coverage including latency spikes
-
-**Next Steps:**
-- Task 1.5: Composite Availability Service (calculates composite SLO bounds from dependencies)
-- Task 1.6: Weighted Attribution Service (feature importance for explainability)
-
-**Blockers:** None
-
----
-
-**Document Version:** 1.0
-**Last Updated:** 2026-02-15
+**Document Version:** 1.1
+**Last Updated:** 2026-02-15 (Session 4)
