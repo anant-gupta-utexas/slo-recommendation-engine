@@ -80,6 +80,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+.claude
 
 # Project specific
 # Add any project-specific ignores here
