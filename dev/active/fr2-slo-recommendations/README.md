@@ -1,7 +1,7 @@
 # FR-2: SLO Recommendation Generation
 
-**Feature Status:** 🟢 Phase 1 Complete (46% overall, Phase 1 at 100%)
-**Last Updated:** 2026-02-15 (Session 4)
+**Feature Status:** ✅ Phase 2 Complete (62% overall)
+**Last Updated:** 2026-02-15 (Session 6)
 
 ---
 
@@ -10,11 +10,11 @@
 ### Run Tests
 ```bash
 source .venv/bin/activate
-pytest tests/unit/domain/entities/ -v
-pytest tests/unit/domain/services/ -v
+pytest tests/unit/domain/ -v        # Phase 1: 167 tests
+pytest tests/unit/application/ -v   # Phase 2: 63 tests (FR-2 only)
 ```
 
-**Expected:** 167 tests passing, 0 failures, 97-100% coverage
+**Expected:** 230 total tests passing (167 Phase 1 + 63 Phase 2), 0 failures, 97-100% coverage
 
 ---
 
@@ -25,15 +25,23 @@ pytest tests/unit/domain/services/ -v
 - **Task 1.2:** SLI Data Value Objects (24 tests, 100% coverage)
 - **Task 1.3:** Availability Calculator Service (31 tests, 100% coverage)
 - **Task 1.4:** Latency Calculator Service (26 tests, 98% coverage)
-- **Task 1.5:** Composite Availability Service (26 tests, 97% coverage) ⭐ NEW
-- **Task 1.6:** Weighted Attribution Service (28 tests, 100% coverage) ⭐ NEW
+- **Task 1.5:** Composite Availability Service (26 tests, 97% coverage)
+- **Task 1.6:** Weighted Attribution Service (28 tests, 100% coverage)
 - **Task 1.7:** Repository Interfaces
 
-### Phase 2: Application Layer ⏭️ **NEXT**
-- **Task 2.1:** SLO Recommendation DTOs (NEXT)
-- **Task 2.2:** GenerateSloRecommendation Use Case
-- **Task 2.3:** GetSloRecommendation Use Case
-- **Task 2.4:** BatchComputeRecommendations Use Case
+### Phase 2: Application Layer ✅ **COMPLETE**
+- **Task 2.1:** SLO Recommendation DTOs (25 tests, 100% coverage) ✅
+- **Task 2.2:** GenerateSloRecommendation Use Case (20 tests, 98% coverage) ✅
+- **Task 2.3:** GetSloRecommendation Use Case (7 tests, 97% coverage) ✅
+- **Task 2.4:** BatchComputeRecommendations Use Case (11 tests, 100% coverage) ✅
+
+### Phase 3: Infrastructure — Persistence & Telemetry ⏭️ **NEXT**
+- **Task 3.1:** SQLAlchemy Models (NEXT)
+- **Task 3.2:** Alembic Migrations
+- **Task 3.3:** Repository Implementation
+- **Task 3.4:** Mock Prometheus Client
+
+### Phase 4: Infrastructure — API & Tasks ⬜ **NOT STARTED**
 
 ---
 
@@ -46,46 +54,29 @@ dev/active/fr2-slo-recommendations/
 ├── fr2-context.md               # Key decisions, dependencies, current status
 ├── fr2-tasks.md                 # Task checklist with acceptance criteria
 └── phase-logs/
-    └── fr2-phase1.md           # Detailed Phase 1 session log
+    ├── fr2-phase1.md           # Phase 1 session log
+    └── fr2-phase2.md           # Phase 2 session log
 ```
 
 ---
 
 ## Implementation Highlights
 
-### Availability Calculator
-- **Tier Strategy:** Percentile-based (p99.9, p99, p95)
-- **Composite Bound Capping:** Conservative/Balanced capped, Aggressive NOT capped
-- **Breach Probability:** Historical window counting
-- **Error Budget:** Monthly minutes calculation
-- **Confidence Intervals:** Bootstrap resampling (1000 iterations)
+### Phase 1: Domain Foundation
+- Three-tier availability/latency recommendations
+- Bootstrap confidence intervals (1000 resamples)
+- Composite bound capping (Conservative/Balanced capped, Aggressive NOT capped)
+- Breach probability estimation
+- Serial/parallel dependency composition
+- Weighted feature attribution
 
-### Latency Calculator
-- **Tier Strategy:** Percentile-based with noise margins
-  - Conservative: p999 + noise margin
-  - Balanced: p99 + noise margin
-  - Aggressive: p95 (no margin - achievable potential)
-- **Noise Margins:** 5% default, 10% for shared infrastructure
-- **Breach Probability:** Historical percentile comparison to threshold
-- **Confidence Intervals:** Bootstrap resampling (1000 iterations)
-
-### Composite Availability Service ⭐ NEW
-- **Serial Dependencies:** R = R_self × ∏R_dep_i
-- **Parallel Redundancy:** R = 1 - ∏(1 - R_replica_j)
-- **Bottleneck Identification:** Weakest link in dependency chain
-- **Soft Dependencies:** Excluded from composite bound
-
-### Weighted Attribution Service ⭐ NEW
-- **Availability Weights:** historical (0.40), dependency risk (0.30), external (0.15), deployment (0.15)
-- **Latency Weights:** p99 (0.50), call chain (0.22), noisy neighbor (0.15), seasonality (0.13)
-- **Normalization:** Contributions sum to 1.0
-- **Sorting:** By absolute contribution descending
-
-### Key Design Decisions
-- Mock Prometheus for parallel development (real integration in FR-6)
-- Weighted attribution with fixed MVP weights (SHAP in Phase 5)
-- Pre-compute recommendations in PostgreSQL (no Redis)
-- Extended lookback (up to 90 days) for cold-start
+### Phase 2: Application Layer
+- Full 12-step recommendation generation pipeline
+- Cold-start detection (30d → 90d when completeness < 90%)
+- Dependency traversal + composite bounds
+- Batch processing with concurrency control (semaphore 20)
+- Robust error handling and detailed metrics
+- Force regeneration capability
 
 ---
 
@@ -94,101 +85,123 @@ dev/active/fr2-slo-recommendations/
 ### From FR-1 (Available)
 - `Service` entity
 - `ServiceDependency` entity
-- `ServiceRepository` interface
-- `DependencyRepository` interface
-- `GraphTraversalService`
+- `ServiceRepositoryInterface` → `get_by_service_id()`, `list_all()`
+- `DependencyRepositoryInterface` → `traverse_graph()`
+- `GraphTraversalService` → `get_subgraph()`
 
-### New FR-2 Components (Phase 1 Complete)
+### FR-2 Components (Phase 1 + 2 Complete)
+**Domain Layer:**
 - `SloRecommendation` entity ✅
 - `AvailabilitySliData` / `LatencySliData` ✅
 - `AvailabilityCalculator` ✅
 - `LatencyCalculator` ✅
-- `CompositeAvailabilityService` ✅ ⭐ NEW
-- `WeightedAttributionService` ✅ ⭐ NEW
+- `CompositeAvailabilityService` ✅
+- `WeightedAttributionService` ✅
 - Repository interfaces ✅
+
+**Application Layer:**
+- SLO Recommendation DTOs (11 DTOs) ✅
+- `GenerateSloRecommendationUseCase` ✅
+- `GetSloRecommendationUseCase` ✅
+- `BatchComputeRecommendationsUseCase` ✅
 
 ---
 
 ## Next Session Actions
 
-1. **Start Phase 2: Application Layer** ⏭️ NEXT
-   - Task 2.1: Create SLO Recommendation DTOs (11 dataclasses)
-   - Task 2.2: Implement GenerateSloRecommendation Use Case
-   - Task 2.3: Implement GetSloRecommendation Use Case
-   - Task 2.4: Implement BatchComputeRecommendations Use Case
+1. **Start Phase 3: Infrastructure — Persistence** ⏭️ NEXT
+   - Task 3.1: Create SQLAlchemy models
+     - `src/infrastructure/database/models/slo_recommendation.py`
+     - `src/infrastructure/database/models/sli_aggregate.py`
+   - Follow FR-1 patterns: `Base`, `Mapped[]`, JSONB for complex types
 
 ---
 
 ## Blockers
 
-**None.** FR-2 is independent of FR-1 Phase 4 (API layer).
+**None.** FR-2 Phase 3 ready to proceed.
 
 ---
 
 ## Documentation
 
 - **Plan:** [fr2-plan.md](./fr2-plan.md) - Full TRS with algorithms, schemas, migrations
-- **Context:** [fr2-context.md](./fr2-context.md) - Decisions, dependencies, status
+- **Context:** [fr2-context.md](./fr2-context.md) - Decisions, dependencies, current status
 - **Tasks:** [fr2-tasks.md](./fr2-tasks.md) - Checklist with acceptance criteria
-- **Phase 1 Log:** [phase-logs/fr2-phase1.md](./phase-logs/fr2-phase1.md) - Detailed session notes
+- **Phase Logs:**
+  - [phase-logs/fr2-phase1.md](./phase-logs/fr2-phase1.md) - Phase 1 session notes
+  - [phase-logs/fr2-phase2.md](./phase-logs/fr2-phase2.md) - Phase 2 session notes
 
 ---
 
 ## Test Commands
 
 ```bash
-# Run all Phase 1 tests
-pytest tests/unit/domain/ -v
+# Run all FR-2 tests (Phase 1 + 2)
+pytest tests/unit/domain/ tests/unit/application/ -v
 
 # Run with coverage
-pytest tests/unit/domain/ --cov=src/domain --cov-report=html
+pytest tests/unit/domain/ tests/unit/application/ --cov=src/domain --cov=src/application --cov-report=html
 
-# Run specific test file
-pytest tests/unit/domain/services/test_availability_calculator.py -v
+# Run Phase 2 tests only
+pytest tests/unit/application/use_cases/test_generate_slo_recommendation.py -v
+pytest tests/unit/application/use_cases/test_get_slo_recommendation.py -v
+pytest tests/unit/application/use_cases/test_batch_compute_recommendations.py -v
 ```
 
 ---
 
-**Last Session:** Session 4 (2026-02-15)
-**Progress:** Phase 1 Domain Foundation - ✅ **100% COMPLETE**
-**Next Goal:** Start Phase 2 (Application Layer - DTOs and Use Cases)
+**Last Session:** Session 6 (2026-02-15)
+**Progress:** Phase 2 Application Layer - ✅ **100% COMPLETE**
+**Next Goal:** Start Phase 3 (Infrastructure - SQLAlchemy models + migrations)
 
 ---
 
-## Handoff Notes (Session 4 → Session 5)
+## Handoff Notes (Session 6 → Session 7)
 
-**Just Completed (Session 4):**
-- ✅ Task 1.5: Composite Availability Service
-  - Files: `src/domain/services/composite_availability_service.py` (73 lines, 97% coverage)
-  - Tests: `tests/unit/domain/services/test_composite_availability_service.py` (26 tests)
-  - Features: Serial/parallel composition, bottleneck identification, soft dep exclusion
+**Just Completed (Session 6):**
+- ✅ Task 2.3: GetSloRecommendation Use Case
+  - Files: `src/application/use_cases/get_slo_recommendation.py` (30 lines, 97% coverage)
+  - Tests: `tests/unit/application/use_cases/test_get_slo_recommendation.py` (7 tests)
+  - Features: Retrieval + force_regenerate delegation, sli_type filtering
 
-- ✅ Task 1.6: Weighted Attribution Service
-  - Files: `src/domain/services/weighted_attribution_service.py` (55 lines, 100% coverage)
-  - Tests: `tests/unit/domain/services/test_weighted_attribution_service.py` (28 tests)
-  - Features: Heuristic weights, normalization, sorting by contribution
+- ✅ Task 2.4: BatchComputeRecommendations Use Case
+  - Files: `src/application/use_cases/batch_compute_recommendations.py` (54 lines, 100% coverage)
+  - Tests: `tests/unit/application/use_cases/test_batch_compute_recommendations.py` (11 tests)
+  - Features: Batch processing, semaphore(20), error collection, detailed metrics
 
 **Current State:**
-- ✅ Phase 1 Complete: 167 tests passing, 0 failures
-- 97-100% coverage on all FR-2 domain layer components
-- All 6 domain tasks complete + repository interfaces
+- ✅ Phase 1 Complete: 167 tests passing
+- ✅ Phase 2 Complete: 63 tests passing
+- ✅ Total: 230 tests passing, 0 failures
+- Coverage: 62% overall, 97-100% on FR-2 code
 
 **Next Immediate Task:**
-- **Task 2.1: SLO Recommendation DTOs** (Phase 2 start)
-- File to create: `src/application/dtos/slo_recommendation_dto.py`
-- Test to create: `tests/unit/application/dtos/test_slo_recommendation_dto.py`
-- Create 11 DTO dataclasses:
-  - Request DTOs: `GenerateSloRequest`, `GetSloRequest`, `BatchComputeRequest`
-  - Response DTOs: `SloRecommendationResponse`, `TierResponse`, `ExplanationResponse`, `DependencyImpactResponse`, `DataQualityResponse`, `FeatureAttributionResponse`
-  - Result DTOs: `BatchComputeResult`, `FailureDetail`
+- **Task 3.1: SQLAlchemy Models** (Phase 3 start)
+- Files to create:
+  - `src/infrastructure/database/models/slo_recommendation.py`
+  - `src/infrastructure/database/models/sli_aggregate.py`
+- Follow FR-1 model patterns:
+  - Extend `Base` from `src/infrastructure/database/models.py`
+  - Use `Mapped[]` type annotations
+  - JSONB columns for complex types (tiers, explanation, data_quality)
+  - Check constraints for enums
+  - Indexes for common queries
 
 **Reference:**
-- See `fr2-plan.md` section 3.4 for DTO specifications
-- Follow FR-1 DTO patterns in `src/application/dtos/dependency_graph_dto.py`
+- See `fr2-plan.md` section 3.5 for schema specifications
+- Follow FR-1 model patterns in `src/infrastructure/database/models.py`
+- Check `alembic/versions/` for migration patterns
 
 **Verification Command:**
 ```bash
 source .venv/bin/activate
-pytest tests/unit/domain/ -v
-# Expected: 262 tests passing (167 FR-2 + 95 FR-1), 0 failures
+pytest tests/unit/ -v
+# Expected: 230 tests passing (167 Phase 1 + 63 Phase 2), 0 failures
 ```
+
+**Technical Notes:**
+- GetSloRecommendation falls back to generation in Phase 2 MVP
+- Phase 3 will add actual repository retrieval
+- BatchComputeRecommendations uses `list_all(skip=0, limit=10000)` to fetch all services
+- Semaphore limits to 20 concurrent generations to avoid DB pressure
