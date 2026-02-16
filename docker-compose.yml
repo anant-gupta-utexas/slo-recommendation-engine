@@ -49,13 +49,15 @@ services:
       - OTEL_GRAPH_INGEST_INTERVAL_MINUTES=15
       - STALE_EDGE_THRESHOLD_HOURS=168
     volumes:
-      - .:/app
+      - ./src:/app/src
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["uvicorn", "src.infrastructure.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["python", "-m", "uvicorn", "src.infrastructure.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   # Prometheus for testing OTel integration (optional)
   prometheus:
