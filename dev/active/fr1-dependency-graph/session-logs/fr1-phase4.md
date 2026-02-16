@@ -495,11 +495,136 @@ open http://localhost:8000/docs
 
 ---
 
-**Phase 4 Status:** 95% complete
+**Phase 4 Status:** 100% COMPLETE
 **Total Production Code:** 1,450 LOC
 **Total Test Code:** 590 LOC
 **Combined:** 2,040 LOC
 
-**Estimated Time to 100%:** 1-2 hours (Session 10)
+**Last Updated:** 2026-02-16 Session 14
 
-**Last Updated:** 2026-02-15 Session 9
+---
+
+## Session 10: E2E Test Debugging & Fixes
+
+**Date:** 2026-02-15 | **Duration:** ~2 hours | **Result:** 5/20 tests passing (25%)
+
+### Accomplishments
+
+1. **Fixed DB Initialization Blocker** — FastAPI lifespan expects `await init_db()` but `config.py` provided a sync version. Made `init_db()` async and updated test fixtures.
+
+2. **Fixed E2E Test Payloads** — Updated 9 test payloads to match correct API schema:
+   - Added required `source` and `timestamp` fields
+   - Moved node fields into `metadata` dict
+   - Changed edge field names (`source_service_id` → `source`, `target_service_id` → `target`)
+   - Wrapped edge attributes in `attributes` object
+   - Changed `communication_mode` from "http" to "sync"
+
+3. **Enabled Authentication** — Uncommented `Depends(verify_api_key)` on both POST and GET endpoints.
+
+4. **Enhanced Error Handler** — Added `HTTPException` handling to `ErrorHandlerMiddleware` to convert FastAPI HTTPExceptions to RFC 7807 format.
+
+### Root Cause Analysis
+
+**Pattern:** All failures returned 500 when expecting successful/error responses. Likely causes (in priority): enum value mismatch between API/DTO/Domain layers, missing required fields in DTO conversion, or database session issues.
+
+**Key Learning:** `ASGITransport(app=app)` does NOT trigger FastAPI lifespan events — must manually call `init_db()` in test fixtures.
+
+---
+
+## Session 11: Bug Fixes & Test Improvements
+
+**Date:** 2026-02-15 | **Duration:** ~1.5 hours | **Result:** 8/20 tests passing (40%)
+
+### Accomplishments
+
+1. **Fixed Test Field Name Mismatches** — Tests expected `services_ingested`/`dependencies_ingested` but API returns `nodes_upserted`/`edges_upserted`. Updated 4 assertion locations.
+
+2. **Added HTTPException → RFC 7807 Conversion** — HTTPExceptions from `Depends()` bypass middleware, so added `@app.exception_handler(HTTPException)` and `@app.exception_handler(RequestValidationError)` custom handlers in `main.py`.
+
+3. **Cleaned Up Auth Middleware** — Removed unnecessary `try/finally` with `session.close()` in `verify_api_key()`.
+
+### Issues Discovered
+
+- **Test Isolation Problem (CRITICAL):** Some tests pass individually but fail in suite. Warning: "coroutine 'Connection._cancel' was never awaited" — async session cleanup issue.
+- **Query Endpoint 500s (5/5 tests):** All query tests return 500, likely issue in `QueryDependencySubgraphUseCase` or `DependencyRepository.traverse_graph()`.
+- **Rate Limit Assertion:** Test expects `type: "about:blank"` but gets `type: "https://httpstatuses.com/429"`.
+
+### Key Learning
+
+FastAPI exception handlers (via `@app.exception_handler()`) run BEFORE middleware catches exceptions. HTTPExceptions from `Depends()` bypass middleware entirely.
+
+---
+
+## Session 12: Test Infrastructure Deep Dive
+
+**Date:** 2026-02-15 | **Duration:** ~2 hours | **Result:** 6-8/20 passing (varies by run)
+
+### Root Cause: Database Session Isolation
+
+**Problem:** Test fixture created its OWN engine/session factory, separate from the app's global one. Data inserted via `db_session` used a different connection pool than the routes used.
+
+**Solution:** Changed `db_session()` to use `get_session_factory()` (the SAME global factory the app routes use) instead of creating a separate engine.
+
+### New Blocker: Event Loop Conflicts
+
+```
+RuntimeError: Task <Task pending> got Future <Future pending> attached to a different loop
+```
+
+**Root Cause:** pytest-asyncio creates a new event loop per test. A module-level `_db_initialized` flag prevented `init_db()` from being called again, so the engine (bound to loop A from test 1) was used by test 2 (which has loop B).
+
+**Recommended Fix:** True function-scoped init/dispose — call `init_db()` and `dispose_db()` for every test, accepting ~2s overhead per test for guaranteed isolation.
+
+### Decisions Made
+
+1. **Use Global Session Factory:** Tests use same factory as app routes — ensures data visibility.
+2. **Defer Testcontainers:** Best solution for isolation but deferred for simplicity.
+3. **Accept Event Loop Tradeoff:** Fixed critical database visibility bug, introduced fixable event loop issues.
+
+### Key Learnings
+
+1. Test data must use the same DB connection as the app — otherwise it's invisible.
+2. pytest-asyncio + shared resources = complex event loop management.
+3. SQLAlchemy AsyncPG engine is bound to a specific event loop on creation — cannot share across loops.
+
+---
+
+## Session 14: Code Review Fixes & E2E Resolution (FINAL)
+
+**Date:** 2026-02-16 | **Result:** 20/20 tests passing (100%)
+
+Applied all fixes from the code review (`fr1-dependency-graph-code-review.md`). See that document for detailed remediation of all 11 critical issues (C1-C11) and important issues (I7, I13, I16).
+
+### E2E Infrastructure Fixes
+
+| Blocker | Resolution |
+|---------|-----------|
+| Event loop conflicts (10 ERROR) | `dispose_db()` + `init_db()` per test function |
+| Query endpoint 500s (5 FAILED) | `except HTTPException: raise` before `except Exception` catch-all |
+| Root service missing from results | Always include starting service in `DependencySubgraphResponse.nodes` |
+| Rate limiter state leaking | Walk middleware stack, `buckets.clear()` in fixture |
+| Correlation ID mismatch | Exception handlers use `request.state.correlation_id` from middleware |
+| Assertion mismatches | 422 for invalid depth (Pydantic validation), correct rate limit type URL |
+
+### Session 15: Pre-existing Test Fixes
+
+**Date:** 2026-02-16 | **Result:** 246/246 tests passing (100%)
+
+Fixed 14 pre-existing integration test failures:
+
+1. **OTel tests (7):** httpx 0.28+ requires `Request` instance on `Response` for `raise_for_status()`. Created `_make_response()` helper. Also fixed stdlib `logger` keyword arg issues (`labels=`, `error=`, etc.) in `otel_service_graph.py`.
+2. **Health check tests (6):** Replaced deprecated `AsyncClient(app=app)` with `AsyncClient(transport=ASGITransport(app=app))` for httpx 0.28+. Made readiness endpoint handle uninitialised DB pool gracefully (returns 503 instead of 500).
+3. **Logging test (1):** Replaced flaky stdout capture approach with direct unit test of `_filter_sensitive_data` processor function.
+
+---
+
+## Complete Phase 4 Timeline
+
+| Session | Date | Tests Passing | Key Fix |
+|---------|------|--------------|---------|
+| 7-9 | 2026-02-15 | 4/20 (20%) | API routes, middleware, Docker, E2E infrastructure |
+| 10 | 2026-02-15 | 5/20 (25%) | DB init async, test payloads, auth enabled |
+| 11 | 2026-02-15 | 8/20 (40%) | Field names, HTTPException handlers |
+| 12 | 2026-02-15 | 6-8/20 (30-40%) | Global session factory, event loop identified |
+| 14 | 2026-02-16 | 20/20 (100%) | Code review fixes, E2E infrastructure rewrite |
+| 15 | 2026-02-16 | 246/246 (100%) | Pre-existing integration test fixes |

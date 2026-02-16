@@ -2,15 +2,15 @@
 ## Service Dependency Graph Ingestion & Management
 
 **Created:** 2026-02-14
-**Last Updated:** 2026-02-16 Session 14 - Code Review Fixes & E2E Resolution
+**Last Updated:** 2026-02-16 Session 15 - Documentation Consolidation & Pre-existing Test Fixes
 
 ---
 
-## Current State (Session 14 - Code Review Fixes Complete)
+## Current State (Session 15 - All Tests Passing)
 
 **Phase:** All 6 Phases Complete - PRODUCTION READY
-**Progress:** 100% (All critical code review issues fixed, E2E tests 100%)
-**Status:** All production code implemented, code review remediations applied, 232 passing / 14 pre-existing failures
+**Progress:** 100% (All code review issues fixed, all tests passing)
+**Status:** All production code implemented, code review remediations applied, **246/246 tests passing (100%)**
 
 ### Session 14 Accomplishments ✅
 
@@ -68,19 +68,19 @@
    - PostgreSQL and Redis containers running via Podman
    - Docker credential store issue resolved (`~/.docker/config.json`)
 
-### Test Results Summary (Session 14)
+### Test Results Summary (Session 15 - FINAL)
 
 | Suite | Passing | Failing | Notes |
 |-------|---------|---------|-------|
 | Unit (domain + application) | 148 | 0 | All passing |
-| Integration (database repos) | 60 | 18 | 18 are pre-existing env/mock issues |
-| E2E (full API) | 20 | 0 | **All passing** (was 8/20) |
-| **Total** | **232** | **18** | Pre-existing failures only |
+| Integration (all) | 78 | 0 | All passing (14 pre-existing failures fixed in Session 15) |
+| E2E (full API) | 20 | 0 | All passing (fixed in Session 14) |
+| **Total** | **246** | **0** | **100% passing** |
 
-**Pre-existing Integration Failures (not caused by Session 14):**
-- 7 OTel tests: httpx mock `raise_for_status` API mismatch
-- 6 Health check tests: Deprecated `AsyncClient(app=)` syntax (needs `ASGITransport`)
-- 5 Logging tests: `DATABASE_URL` env var not set / log capture issue
+**Session 15 fixes (pre-existing integration failures):**
+- 7 OTel tests: httpx 0.28+ `Response` needs `Request` for `raise_for_status()`, stdlib logger kwarg fixes
+- 6 Health check tests: `AsyncClient(app=)` → `ASGITransport`, readiness handles uninitialised DB
+- 1 Logging test: Direct processor test instead of flaky stdout capture
 
 ### All Previous Blockers - RESOLVED ✅
 
@@ -573,12 +573,15 @@ Request
   - ✅ Integration tests (260 LOC, 8 tests passing - 100%)
 
 **Current Working On:**
+- **Session 15 (2026-02-16):** Pre-existing Test Fixes & Documentation Consolidation ✅
+  - ✅ Fixed all 14 pre-existing integration test failures (246/246 passing)
+  - ✅ Consolidated session logs into phase-based files (removed session-10/11/12)
+  - ✅ Updated all documentation to reflect current state
 - **Session 14 (2026-02-16):** Code Review Fixes & E2E Resolution ✅
   - ✅ Fixed all 11 critical issues from code review (C1-C11)
   - ✅ Fixed important issues (I7, I13, I16)
   - ✅ Resolved all E2E test blockers (20/20 passing)
   - ✅ Set up Podman as Docker replacement on macOS
-  - ✅ **All phases: 100% complete, code review remediated**
 
 **Blockers:**
 - None
@@ -646,136 +649,24 @@ Request
 - Partial indexes applied to `is_stale`, `discovered`, `status` for query optimization
 - Trigger function shared across tables, dropped in final migration downgrade
 
-## Next Steps (Session 9)
+## Next Steps
 
-**Immediate (PRIORITY):**
-1. ✅ ~~Fix 17 failing use case tests~~ **DONE - All 53/53 passing**
-2. ✅ ~~Move to Phase 4: API layer with FastAPI~~ **90% DONE**
-   - ✅ Create FastAPI routes for ingestion and query endpoints
-   - ✅ Implement Pydantic models for API validation
-   - ✅ Add authentication middleware (API key verification)
-   - ✅ Add rate limiting middleware
-   - ✅ Add error handling middleware
-3. ⬜ **Write E2E tests for full API workflows** **<-- NEXT PRIORITY**
-   - Test ingestion workflow (POST /dependencies)
-   - Test query workflow (GET /services/{id}/dependencies)
-   - Test authentication (401 on missing/invalid key)
-   - Test rate limiting (429 after limit exceeded)
-   - Test error handling (400, 404, 500 responses)
-   - Test correlation IDs in responses
-4. ⬜ Manual testing with docker-compose stack
-   - Start PostgreSQL + API via docker-compose
-   - Run migration: `alembic upgrade head`
-   - Create test API key (manual SQL or wait for CLI)
-   - Test Swagger UI at /docs
-   - Test all endpoints with curl/httpx
-5. ⬜ CLI tool for API key management (deferred to Phase 5)
-6. ⬜ Add integration tests for use cases (with real repositories) - can be done in parallel
+**All implementation work is complete.** Remaining items for production:
 
-**Weekly Milestones:**
-- ✅ Week 1: Domain layer complete, unit tests passing (DONE)
-- ✅ Week 2: Database schema deployed, repositories implemented (100% DONE) ⭐
-  - ✅ Integration tests complete (54/54 passing - 100%)
-  - ✅ Performance benchmarks exceeded (50ms vs 100ms target for 1000 nodes)
-  - ✅ All repository methods tested and production-ready
-- ✅ Week 3: Application layer 100% complete ⭐
-  - ✅ All DTOs and use cases implemented
-  - ✅ DTO tests 100% (31/31 passing)
-  - ✅ Use case tests 100% (22/22 passing)
-  - ✅ **Total: 53/53 tests passing (100%)**
-- 🔧 Week 4: API layer 90% complete **<-- CURRENT**
-  - ✅ FastAPI app + routes + schemas (900 LOC)
-  - ✅ Authentication, rate limiting, error handling middleware (431 LOC)
-  - ✅ API key model & migration
-  - ✅ App creation test passing
-  - ⏸️ E2E tests (next session)
-  - ⏸️ Manual testing with docker-compose
-- ⬜ Week 5: Observability integrated, monitoring operational
-- ⬜ Week 6: OTel integration complete, deployed to staging
-
-**Files Created in Phase 3 (Session 6):**
-
-**Code (770 LOC):**
-- ✅ `src/application/dtos/common.py` (58 LOC)
-- ✅ `src/application/dtos/dependency_graph_dto.py` (107 LOC)
-- ✅ `src/application/dtos/dependency_subgraph_dto.py` (77 LOC)
-- ✅ `src/application/use_cases/ingest_dependency_graph.py` (259 LOC)
-- ✅ `src/application/use_cases/query_dependency_subgraph.py` (165 LOC)
-- ✅ `src/application/use_cases/detect_circular_dependencies.py` (104 LOC)
-
-**Tests (~1200 LOC):**
-- ✅ `tests/unit/application/dtos/test_common.py` (5 tests, 100% passing)
-- ✅ `tests/unit/application/dtos/test_dependency_graph_dto.py` (20 tests, 100% passing)
-- ✅ `tests/unit/application/dtos/test_dependency_subgraph_dto.py` (10 tests, 100% passing)
-- 🔧 `tests/unit/application/use_cases/test_ingest_dependency_graph.py` (6 tests, 0% passing - fixture issue)
-- 🔧 `tests/unit/application/use_cases/test_query_dependency_subgraph.py` (8 tests, 62% passing)
-- 🔧 `tests/unit/application/use_cases/test_detect_circular_dependencies.py` (8 tests, 0% passing - fixture issue)
-
-**Key Implementation Decisions (Phase 3):**
-- Used dataclasses for DTOs (not Pydantic - reserved for API/infrastructure layer)
-- Async use cases with dependency injection via constructors
-- Simplified edge merging for MVP (DB ON CONFLICT handles it)
-- Auto-creation of unknown services with discovered=true flag
-- Comprehensive enum validation and error handling
-- AsyncMock from unittest.mock for all test mocks
-- No background tasks yet (deferred to Phase 5)
-
-**Files Modified in Session 7 (2026-02-15):**
-- ✅ Fixed `tests/unit/application/use_cases/test_ingest_dependency_graph.py`
-  - Added mock_edge_merge_service fixture (MagicMock, not AsyncMock)
-  - Fixed bulk_upsert expectations (single call with all services)
-  - All 6 tests now passing
-- ✅ Fixed `tests/unit/application/use_cases/test_detect_circular_dependencies.py`
-  - Renamed constructor parameters (alert_repository, detector)
-  - Updated assertions to work with CircularDependencyAlert objects
-  - All 8 tests now passing
-- ✅ Fixed `tests/unit/application/use_cases/test_query_dependency_subgraph.py`
-  - Added _get_service_id_from_uuid helper mocks for UUID→string conversion
-  - All 8 tests now passing
-- ✅ Fixed `src/application/use_cases/query_dependency_subgraph.py`
-  - Fixed statistics calculation bug (lines 129-132): len(nodes) not len(nodes)-1
-  - Starting service is not in returned nodes list
-- ✅ Updated `dev/active/fr1-dependency-graph/fr1-tasks.md` to reflect 100% Phase 3 completion
-- ✅ Updated `dev/active/fr1-dependency-graph/fr1-context.md` (this file) with Session 7 summary
-
-**Files Created in Session 6 (2026-02-15):**
-- ✅ Created `tests/unit/application/dtos/__init__.py`
-- ✅ Created `tests/unit/application/dtos/test_common.py` (85 LOC)
-- ✅ Created `tests/unit/application/dtos/test_dependency_graph_dto.py` (290 LOC)
-- ✅ Created `tests/unit/application/dtos/test_dependency_subgraph_dto.py` (220 LOC)
-- ✅ Created `tests/unit/application/use_cases/__init__.py`
-- ✅ Created `tests/unit/application/use_cases/test_ingest_dependency_graph.py` (290 LOC)
-- ✅ Created `tests/unit/application/use_cases/test_query_dependency_subgraph.py` (330 LOC)
-- ✅ Created `tests/unit/application/use_cases/test_detect_circular_dependencies.py` (280 LOC)
-
-**Previous Files Modified (Session 5 - 2026-02-15):**
-- ✅ Fixed `src/infrastructure/database/repositories/dependency_repository.py`
-  - Lines 271, 291-295: Fixed downstream traversal service collection
-  - Lines 369, 387-391: Fixed upstream traversal service collection
-  - Lines 254-257, 350-353: Removed overly aggressive cycle prevention
-
-**Files Modified in Session 4:**
-- ✅ Created 7 integration test files (~600 LOC total)
-- ✅ Fixed critical bugs in service_repository.py and dependency_repository.py
-- ✅ Updated conftest.py with testcontainer setup
-- ✅ Updated session log with Session 4 details (integration tests)
-- ✅ Updated context document with current status
+1. **Load Testing** — k6 tests for 200 concurrent users, verify p95 < 500ms
+2. **Security Audit** — OWASP ZAP scan, container image scanning, `pip-audit`
+3. **Production Deployment** — Helm install to staging, smoke tests, runbook creation
+4. **CLI Tool** — API key management CLI (deferred from Phase 4)
 
 ---
 
-**Document Version:** 1.13
-**Last Updated:** 2026-02-16 Session 14 - Code Review Fixes & E2E Resolution
+**Document Version:** 1.14
+**Last Updated:** 2026-02-16 Session 15 - Documentation Consolidation & Pre-existing Test Fixes
 **Change Log:**
-- v1.13 (2026-02-16 Session 14): **CODE REVIEW FIXES COMPLETE** - All 11 critical issues fixed (C1-C11), E2E tests 20/20 (was 8/20), Podman support, integration test fixes
-- v1.12 (2026-02-15 Session 13): **ALL PHASES COMPLETE** - Phase 6 Integration & Deployment done, documentation updated, production-ready
-- v1.11 (2026-02-15 Session 12): **Phase 5+6 COMPLETE** - Observability, OTel integration, scheduler, Docker, CI/CD, Helm charts
-- v1.10 (2026-02-15 Session 11): **Phase 4 65% COMPLETE** - Fixed critical bugs, HTTPException handlers, test field names, 8/20 tests passing (40%), test isolation issues identified
-- v1.9 (2026-02-15 Session 10): **Phase 4 95% COMPLETE** - Fixed DB init blocker, updated test payloads, enabled auth, 5/20 tests passing, debugging 500 errors
-- v1.8 (2026-02-15 Session 8): **Phase 4 90% COMPLETE** - Middleware layer implemented (1,450+ LOC), E2E tests pending
-- v1.7 (2026-02-15 Session 7): **Phase 3 100% COMPLETE** - All 53/53 tests passing, ready for Phase 4 API layer
-- v1.6 (2026-02-15 Session 6): Phase 3 code complete, tests 68% (31 DTO tests passing, 17 use case tests need fixture fixes)
-- v1.5 (2026-02-15 Session 5): Phase 2 100% complete, all 54 integration tests passing
-- v1.4 (2026-02-14): Phase 2 integration tests complete (90%), ready for Phase 3
-- v1.3 (2026-02-14): Repository layer complete (80% Phase 2), integration tests remaining
-- v1.2 (2026-02-14): Updated with Phase 2 progress (50% complete), next steps for repository implementations
-- v1.1 (2026-02-14): Finalized all 5 pending decisions with recommended options
+- v1.14 (2026-02-16 Session 15): **ALL TESTS PASSING (246/246)** - Fixed 14 pre-existing integration test failures, consolidated session logs into phase files, cleaned up stale documentation sections
+- v1.13 (2026-02-16 Session 14): **CODE REVIEW FIXES COMPLETE** - All 11 critical issues fixed (C1-C11), E2E tests 20/20 (was 8/20), Podman support
+- v1.12 (2026-02-15 Session 13): **ALL PHASES COMPLETE** - Phase 6 Integration & Deployment done, production-ready
+- v1.11 (2026-02-15 Sessions 10-12): Phase 4 E2E debugging — DB init, test payloads, session factory, event loop fixes
+- v1.8 (2026-02-15 Sessions 7-9): Phase 3 100% → Phase 4 90% — API layer, middleware, Docker, E2E infrastructure
+- v1.5 (2026-02-15 Sessions 5-6): Phase 2 100% → Phase 3 100% — Integration tests, application layer
+- v1.1-1.4 (2026-02-14 Sessions 1-4): Phase 1 → Phase 2 — Domain foundation, infrastructure, repository implementations

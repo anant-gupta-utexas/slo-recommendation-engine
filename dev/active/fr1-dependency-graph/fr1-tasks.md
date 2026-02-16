@@ -4,7 +4,7 @@
 **Created:** 2026-02-14
 **Status:** Phase 1-6 Complete ✅ - PRODUCTION READY (Code Review Fixes Applied)
 **Target Completion:** Week 6
-**Last Updated:** 2026-02-16 Session 14 - Code Review Fixes & E2E Resolution
+**Last Updated:** 2026-02-16 Session 15 - Documentation Consolidation & Pre-existing Test Fixes
 
 ---
 
@@ -511,8 +511,7 @@
 - ⚠️ Identified blocking issue: init_db() async mismatch
 - 📊 **Total Phase 4: 2,040 LOC (1,450 production + 590 test)**
 
-**BLOCKER:** FastAPI lifespan expects async init_db() but config.py provides sync version.
-See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for solution.
+**RESOLVED:** All Phase 4 blockers fixed. See `session-logs/fr1-phase4.md` for full session 7-15 history.
 
 ---
 
@@ -796,7 +795,7 @@ See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for sol
 - [✓] Integration tests (260 LOC, 8/8 passing)
 - [✓] **Total: ~2,200 LOC created, 2 files modified**
 
-**Session Log:** `dev/active/fr1-dependency-graph/session-logs/fr1-phase6-integration-deployment.md`
+**Session Log:** `dev/active/fr1-dependency-graph/session-logs/fr1-phase6.md`
 
 ---
 
@@ -804,7 +803,7 @@ See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for sol
 
 ### Code Quality
 - [✓] All unit tests passing (148/148, >80% overall coverage)
-- [~] Integration tests: 60/78 passing (18 pre-existing env/mock issues, not FR-1 related)
+- [✓] All integration tests passing (78/78 — 14 pre-existing failures fixed Session 15)
 - [✓] All E2E tests passing (20/20)
 - [ ] Linting (ruff) passes with zero errors
 - [ ] Type checking (mypy --strict) passes with zero errors
@@ -874,4 +873,4 @@ See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for sol
 - [✗] Blocked
 - [~] Deferred
 
-**Last Updated:** 2026-02-16 Session 14 - Code Review Fixes & E2E Resolution
+**Last Updated:** 2026-02-16 Session 15 - Documentation Consolidation & Pre-existing Test Fixes
