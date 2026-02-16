@@ -33,6 +33,12 @@ dependencies = [
     "opentelemetry-api>=1.25.0",
     "opentelemetry-sdk>=1.25.0",
     "opentelemetry-instrumentation-fastapi>=0.46b0",
+    "opentelemetry-instrumentation-httpx>=0.46b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.46b0",
+
+    # HTTP Client & Retry Logic
+    "httpx>=0.27.0",
+    "tenacity>=8.2.0",
 ]
 
 [project.optional-dependencies]
