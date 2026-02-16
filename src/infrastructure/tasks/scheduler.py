@@ -8,16 +8,16 @@ Uses APScheduler's AsyncIOScheduler for in-process scheduling.
 For production deployments with multiple replicas, consider migrating to Celery.
 """
 
-import logging
 from typing import Any
 
+import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.infrastructure.config.settings import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Global scheduler instance
 _scheduler: AsyncIOScheduler | None = None
