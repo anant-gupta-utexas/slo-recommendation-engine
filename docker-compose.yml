@@ -17,10 +17,24 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     ports:
       - "8000:8000"
     environment:
@@ -28,12 +42,34 @@ services:
       - DATABASE_URL=postgresql+asyncpg://slo_user:slo_password_dev@db:5432/slo_engine
       - DB_POOL_SIZE=20
       - DB_MAX_OVERFLOW=10
+      - REDIS_URL=redis://redis:6379/0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+      - PROMETHEUS_URL=http://prometheus:9090
+      - LOG_LEVEL=INFO
+      - OTEL_GRAPH_INGEST_INTERVAL_MINUTES=15
+      - STALE_EDGE_THRESHOLD_HOURS=168
     volumes:
       - .:/app
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: ["uvicorn", "src.infrastructure.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Prometheus for testing OTel integration (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.dev.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
 
 volumes:
   postgres_data:
+  redis_data:
+  prometheus_data:
