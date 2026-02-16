@@ -126,6 +126,10 @@ class BackgroundTaskSettings(BaseSettings):
         default=168,  # 7 days
         description="Threshold to mark edges as stale (hours)",
     )
+    slo_batch_interval_hours: int = Field(
+        default=24,
+        description="SLO recommendation batch computation interval (hours)",
+    )
 
 
 class PrometheusSettings(BaseSettings):

@@ -106,6 +106,30 @@ rate_limit_exceeded_total = Counter(
     labelnames=["client_id", "endpoint"],
 )
 
+# SLO Recommendation Batch Metrics
+slo_batch_recommendations_total = Counter(
+    name="slo_engine_slo_batch_recommendations_total",
+    documentation="Total number of SLO batch recommendation runs",
+    labelnames=["status"],  # success, failure
+)
+
+slo_batch_recommendations_duration_seconds = Histogram(
+    name="slo_engine_slo_batch_recommendations_duration_seconds",
+    documentation="SLO batch recommendation computation duration in seconds",
+    buckets=(
+        1.0,    # 1s
+        5.0,    # 5s
+        10.0,   # 10s
+        30.0,   # 30s
+        60.0,   # 1m
+        120.0,  # 2m
+        300.0,  # 5m
+        600.0,  # 10m
+        1800.0, # 30m
+        3600.0, # 1h
+    ),
+)
+
 
 def get_metrics_content() -> tuple[bytes, str]:
     """Generate Prometheus metrics in exposition format.
@@ -235,3 +259,17 @@ def record_rate_limit_exceeded(
         client_id=client_id,
         endpoint=endpoint,
     ).inc()
+
+
+def record_batch_recommendation_run(
+    status: str,
+    duration: float,
+) -> None:
+    """Record SLO batch recommendation run metrics.
+
+    Args:
+        status: Run status (success or failure)
+        duration: Run duration in seconds
+    """
+    slo_batch_recommendations_total.labels(status=status).inc()
+    slo_batch_recommendations_duration_seconds.observe(duration)

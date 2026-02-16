@@ -3,6 +3,7 @@
 This module configures and manages scheduled background tasks for:
 - OTel Service Graph ingestion (every 15 minutes)
 - Stale edge detection (daily)
+- Batch SLO recommendation computation (every 24 hours)
 
 Uses APScheduler's AsyncIOScheduler for in-process scheduling.
 For production deployments with multiple replicas, consider migrating to Celery.
@@ -74,6 +75,9 @@ def _register_jobs(scheduler: AsyncIOScheduler, settings: Any) -> None:
     # Import job functions here to avoid circular imports
     from src.infrastructure.tasks.ingest_otel_graph import ingest_otel_service_graph
     from src.infrastructure.tasks.mark_stale_edges import mark_stale_edges_task
+    from src.infrastructure.tasks.batch_recommendations import (
+        batch_compute_recommendations,
+    )
 
     # OTel Service Graph ingestion (every N minutes, configurable)
     interval_minutes = settings.background_tasks.otel_graph_ingest_interval_minutes
@@ -98,6 +102,20 @@ def _register_jobs(scheduler: AsyncIOScheduler, settings: Any) -> None:
         replace_existing=True,
     )
     logger.info("Registered stale edge detection job", schedule="daily at 02:00 UTC")
+
+    # Batch SLO recommendation computation (every N hours, configurable)
+    interval_hours = settings.background_tasks.slo_batch_interval_hours
+    scheduler.add_job(
+        batch_compute_recommendations,
+        trigger=IntervalTrigger(hours=interval_hours),
+        id="batch_compute_recommendations",
+        name="Batch compute SLO recommendations for all services",
+        replace_existing=True,
+    )
+    logger.info(
+        "Registered batch SLO recommendation job",
+        interval_hours=interval_hours,
+    )
 
 
 async def start_scheduler() -> None:

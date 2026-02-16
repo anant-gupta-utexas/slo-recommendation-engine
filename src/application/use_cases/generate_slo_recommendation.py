@@ -238,12 +238,13 @@ class GenerateSloRecommendationUseCase:
             service_id, lookback_days, bucket_hours=24
         )
 
-        # Fetch dependency subgraph
+        # Fetch dependency subgraph (include stale edges to get full picture)
         nodes, edges = await self.graph_traversal_service.get_subgraph(
             service_uuid,
             direction=TraversalDirection.DOWNSTREAM,
+            repository=self.dependency_repository,
             max_depth=DEPENDENCY_GRAPH_MAX_DEPTH,
-            include_soft=True,
+            include_stale=False,  # Only include active dependencies
         )
 
         # Filter hard sync dependencies
@@ -397,9 +398,12 @@ class GenerateSloRecommendationUseCase:
             return None
 
         # Compute tiers (assuming no shared infrastructure for MVP)
-        tiers_domain = self.latency_calculator.compute_tiers(
-            latency_data=latency_sli, has_shared_infrastructure=False
+        # Note: Calculator expects a list of data points, but we have one aggregate
+        tiers_list = self.latency_calculator.compute_tiers(
+            sli_data=[latency_sli], shared_infrastructure=False
         )
+        # Convert list to dict keyed by tier level
+        tiers_domain = {tier.level: tier for tier in tiers_list}
 
         # Compute feature attribution
         feature_values = {
