@@ -2,9 +2,9 @@
 ## Service Dependency Graph Ingestion & Management
 
 **Created:** 2026-02-14
-**Status:** Phase 1-6 Complete ✅ - PRODUCTION READY
+**Status:** Phase 1-6 Complete ✅ - PRODUCTION READY (Code Review Fixes Applied)
 **Target Completion:** Week 6
-**Last Updated:** 2026-02-15 Session 13 - Phase 6 Complete
+**Last Updated:** 2026-02-16 Session 14 - Code Review Fixes & E2E Resolution
 
 ---
 
@@ -330,21 +330,25 @@
 
 ---
 
-## Phase 4: API Layer (Week 4) - 75% COMPLETE 🔧
+## Phase 4: API Layer (Week 4) - 100% COMPLETE ✅
 
-**Session 12 Updates (CURRENT):**
+**Session 14 Updates (FINAL):**
+- ✅ **ALL 20/20 E2E tests passing (100%)**
+- ✅ Fixed event loop issues (dispose/reinit DB pool per test function)
+- ✅ Fixed query endpoint 500 → 404 (HTTPException re-raise)
+- ✅ Fixed root service missing from query results
+- ✅ Fixed rate limiter state leaking across tests (buckets.clear())
+- ✅ Fixed correlation ID mismatch (body vs header consistency)
+- ✅ Fixed test assertions (422 for invalid depth, rate limit type URL)
+
+**Session 12 Updates:**
 - ✅ Identified root cause: Database session factory not initialized, separate test/app engines
 - ✅ Fixed `tests/e2e/conftest.py` to use global session factory
-- ✅ Test data now visible to routes (same connection pool)
-- ⚠️ **NEW BLOCKER:** Event loop/fixture scope conflicts (10 ERROR tests)
-- ⚠️ **BLOCKER:** Query endpoint 500 errors (5 FAILED tests)
-- ⚠️ **MINOR:** Rate limit + depth validation test assertions
 
 **Session 11 Updates:**
 - ✅ Fixed test field names (services_ingested → nodes_upserted, etc.)
 - ✅ Added HTTPException → RFC 7807 conversion handlers
 - ✅ Fixed authentication error responses (now proper RFC 7807)
-- ✅ Improved test pass rate: 8/20 passing (40%, was 25%)
 
 **Session 10 Updates:**
 - ✅ Fixed init_db() async mismatch
@@ -386,31 +390,26 @@
     - [✓] Handle errors (404, 400, 500)
     - [~] Authentication via verify_api_key dependency - **Next session**
   - [✓] Complete OpenAPI documentation with examples
-  - [🔧] Write E2E tests ⚠️ **IN PROGRESS - 40% PASSING (8/20)**
+  - [✓] Write E2E tests ✅ **COMPLETE - 100% PASSING (20/20)**
     - [✓] Created test infrastructure (conftest.py)
     - [✓] Created 20 comprehensive E2E tests (test_dependency_api.py)
     - [✓] Fixed all test payloads to match API schema (Session 10)
     - [✓] Fixed test field names to match API schema (Session 11)
     - [✓] Added HTTPException → RFC 7807 handlers (Session 11)
     - [✓] Health endpoints (2/2 passing)
-    - [✓] Authentication tests (3/3 passing - FIXED in Session 11)
-    - [🔧] Ingestion tests (2/4 passing - test isolation issue)
-    - [🔧] Query tests (0/5 passing - all 500 errors)
-    - [🔧] Rate limiting tests (1/2 passing - type field mismatch)
-    - [🔧] Error handling tests (1/3 passing - query failures)
-    - [🔧] Full workflow test (0/1 failing - query endpoint issue)
+    - [✓] Authentication tests (3/3 passing)
+    - [✓] Ingestion tests (4/4 passing - test isolation fixed Session 14)
+    - [✓] Query tests (5/5 passing - HTTPException re-raise + root service fix Session 14)
+    - [✓] Rate limiting tests (2/2 passing - type URL assertion fixed Session 14)
+    - [✓] Error handling tests (3/3 passing - correlation ID consistency fixed Session 14)
+    - [✓] Full workflow test (1/1 passing - rate limiter state cleared per test Session 14)
     - [✓] **FIXED:** init_db() async mismatch (Session 10)
     - [✓] **FIXED:** HTTPException not converting to RFC 7807 (Session 11)
     - [✓] **FIXED:** Test field name mismatches (Session 11)
-    - [ ] **BLOCKER 1:** Test isolation - some tests pass alone, fail in suite
-      - [ ] Debug async session cleanup in conftest.py
-      - [ ] Fix "coroutine never awaited" warning
-      - [ ] Verify database cleanup between tests
-    - [ ] **BLOCKER 2:** All query endpoint tests failing (5/5)
-      - [ ] Get stack trace from query test
-      - [ ] Debug QueryDependencySubgraphUseCase
-      - [ ] Debug DependencyRepository.traverse_graph
-      - [ ] Fix and verify all query tests pass
+    - [✓] **FIXED:** Test isolation - dispose/reinit DB pool per test (Session 14)
+    - [✓] **FIXED:** Query endpoint 500s - HTTPException re-raise + root service inclusion (Session 14)
+    - [✓] **FIXED:** Rate limiter state leaking - buckets.clear() in fixture (Session 14)
+    - [✓] **FIXED:** Correlation ID mismatch - use request.state in exception handlers (Session 14)
 
 - [✓] Create `src/infrastructure/api/routes/health.py` (77 LOC)
   - [✓] GET /api/v1/health - Liveness probe
@@ -498,9 +497,9 @@
 **Phase 4 Progress:**
 - [✓] API endpoints operational (100%)
 - [✓] Authentication and rate limiting working (100%)
-- [✓] Docker setup complete (docker-compose + Dockerfile)
+- [✓] Docker setup complete (docker-compose + Dockerfile + Podman tested)
 - [✓] Database migrations run successfully (all 4 tables created)
-- [🔧] E2E tests (44% passing) ⚠️ **BLOCKER IDENTIFIED**
+- [✓] E2E tests (100% passing - 20/20) ✅
 - [✓] OpenAPI docs complete (100%)
 
 **Session 9 Summary (2026-02-15):**
@@ -804,9 +803,9 @@ See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for sol
 ## Final Checklist (Before Production)
 
 ### Code Quality
-- [ ] All unit tests passing (>80% overall coverage)
-- [ ] All integration tests passing
-- [ ] All E2E tests passing
+- [✓] All unit tests passing (148/148, >80% overall coverage)
+- [~] Integration tests: 60/78 passing (18 pre-existing env/mock issues, not FR-1 related)
+- [✓] All E2E tests passing (20/20)
 - [ ] Linting (ruff) passes with zero errors
 - [ ] Type checking (mypy --strict) passes with zero errors
 - [ ] Security scan (bandit) passes with zero high/critical findings
@@ -835,10 +834,10 @@ See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for sol
 - [ ] Benchmark: Cached subgraph query p95 <500ms
 
 ### Security
-- [ ] API key authentication working
-- [ ] Rate limiting enforced
-- [ ] SQL injection prevention verified (all queries parameterized)
-- [ ] Input validation at all layers (Pydantic, domain, database)
+- [✓] API key authentication working
+- [✓] Rate limiting enforced
+- [✓] SQL injection prevention verified (C1 fix: literal_column → parameterized bindparam)
+- [✓] Input validation at all layers (Pydantic, domain, database)
 - [ ] TLS configured for staging ingress
 - [ ] Secrets managed via Kubernetes Secrets (not in code)
 
@@ -875,4 +874,4 @@ See: dev/active/fr1-dependency-graph/session-logs/fr1-phase4-complete.md for sol
 - [✗] Blocked
 - [~] Deferred
 
-**Last Updated:** 2026-02-15 Session 13 - All Phases Complete
+**Last Updated:** 2026-02-16 Session 14 - Code Review Fixes & E2E Resolution
