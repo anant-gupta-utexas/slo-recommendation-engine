@@ -13,6 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.infrastructure.database.config import dispose_db, init_db
+from src.infrastructure.observability import (
+    configure_logging,
+    instrument_fastapi_app,
+    setup_tracing,
+)
 
 
 @asynccontextmanager
@@ -21,15 +26,34 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup and shutdown events.
 
     Startup:
+    - Configure observability (logging, tracing)
     - Initialize database connection pool
+    - Instrument FastAPI with OpenTelemetry
+    - Start background task scheduler
 
     Shutdown:
+    - Shutdown background task scheduler
     - Dispose database connection pool
     """
-    # Startup
+    # Startup: Configure observability
+    configure_logging()
+    setup_tracing()
+
+    # Initialize database
     await init_db()
+
+    # Instrument FastAPI after app is created
+    instrument_fastapi_app(app)
+
+    # Start background task scheduler
+    from src.infrastructure.tasks.scheduler import start_scheduler
+    await start_scheduler()
+
     yield
-    # Shutdown
+
+    # Shutdown: Stop scheduler first, then dispose DB
+    from src.infrastructure.tasks.scheduler import shutdown_scheduler
+    await shutdown_scheduler()
     await dispose_db()
 
 
@@ -64,10 +88,14 @@ def create_app() -> FastAPI:
 
     # Custom middleware (order matters: last added = first executed)
     from .middleware.error_handler import ErrorHandlerMiddleware
+    from .middleware.logging_middleware import LoggingMiddleware
+    from .middleware.metrics_middleware import MetricsMiddleware
     from .middleware.rate_limit import RateLimitMiddleware
 
     app.add_middleware(ErrorHandlerMiddleware)  # Outermost: catches all errors
-    app.add_middleware(RateLimitMiddleware)  # Second: rate limiting
+    app.add_middleware(MetricsMiddleware)  # Record metrics for all requests
+    app.add_middleware(LoggingMiddleware)  # Log all requests
+    app.add_middleware(RateLimitMiddleware)  # Rate limiting
 
     # Register routes
     from .routes import dependencies, health

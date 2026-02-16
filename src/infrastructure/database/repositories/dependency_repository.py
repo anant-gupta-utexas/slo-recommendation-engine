@@ -4,6 +4,7 @@ This module implements the DependencyRepositoryInterface using SQLAlchemy
 with recursive CTEs for efficient graph traversal.
 """
 
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence
 from uuid import UUID
@@ -28,6 +29,10 @@ from src.infrastructure.database.models import (
     ServiceDependencyModel,
     ServiceModel,
 )
+from src.infrastructure.observability import get_tracer, record_graph_traversal
+
+# Get tracer for manual instrumentation
+tracer = get_tracer(__name__)
 
 
 class DependencyRepository(DependencyRepositoryInterface):
@@ -166,32 +171,54 @@ class DependencyRepository(DependencyRepositoryInterface):
             - nodes: List of Service entities in the subgraph
             - edges: List of ServiceDependency entities in the subgraph
         """
-        # Build recursive CTE based on traversal direction
-        if direction == TraversalDirection.DOWNSTREAM:
-            edges, visited_services = await self._traverse_downstream(
-                service_id, max_depth, include_stale
-            )
-        elif direction == TraversalDirection.UPSTREAM:
-            edges, visited_services = await self._traverse_upstream(
-                service_id, max_depth, include_stale
-            )
-        else:  # TraversalDirection.BOTH
-            # Execute both traversals and merge results
-            downstream_edges, downstream_services = await self._traverse_downstream(
-                service_id, max_depth, include_stale
-            )
-            upstream_edges, upstream_services = await self._traverse_upstream(
-                service_id, max_depth, include_stale
+        # Create OpenTelemetry span for tracing
+        with tracer.start_as_current_span("traverse_graph") as span:
+            # Add span attributes
+            span.set_attribute("graph.direction", direction.value)
+            span.set_attribute("graph.max_depth", max_depth)
+            span.set_attribute("graph.include_stale", include_stale)
+
+            # Record start time for metrics
+            start_time = time.perf_counter()
+
+            # Build recursive CTE based on traversal direction
+            if direction == TraversalDirection.DOWNSTREAM:
+                edges, visited_services = await self._traverse_downstream(
+                    service_id, max_depth, include_stale
+                )
+            elif direction == TraversalDirection.UPSTREAM:
+                edges, visited_services = await self._traverse_upstream(
+                    service_id, max_depth, include_stale
+                )
+            else:  # TraversalDirection.BOTH
+                # Execute both traversals and merge results
+                downstream_edges, downstream_services = await self._traverse_downstream(
+                    service_id, max_depth, include_stale
+                )
+                upstream_edges, upstream_services = await self._traverse_upstream(
+                    service_id, max_depth, include_stale
+                )
+
+                # Merge and deduplicate
+                edges = self._merge_edges(downstream_edges, upstream_edges)
+                visited_services = list(set(downstream_services + upstream_services))
+
+            # Fetch full service entities for all visited services
+            services = await self._fetch_services(visited_services)
+
+            # Record metrics
+            duration = time.perf_counter() - start_time
+            record_graph_traversal(
+                direction=direction.value,
+                depth=max_depth,
+                duration=duration,
             )
 
-            # Merge and deduplicate
-            edges = self._merge_edges(downstream_edges, upstream_edges)
-            visited_services = list(set(downstream_services + upstream_services))
+            # Add result metrics to span
+            span.set_attribute("graph.services_count", len(services))
+            span.set_attribute("graph.edges_count", len(edges))
 
-        # Fetch full service entities for all visited services
-        services = await self._fetch_services(visited_services)
-
-        return {"services": services, "edges": edges}
+            return {"services": services, "edges": edges}
 
     async def _traverse_downstream(
         self, service_id: UUID, max_depth: int, include_stale: bool
