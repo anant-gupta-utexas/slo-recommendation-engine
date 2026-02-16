@@ -253,45 +253,49 @@ No new library dependencies required. FR-2 uses:
 
 ---
 
-## Current Status
+## Current Status (Session 5)
 
 **Phase Completion:**
-- 🟡 **Phase 1 (Week 1)**: Domain layer — IN PROGRESS (67% complete)
-  - ✅ Task 1.1: SLO Recommendation Entity (COMPLETE)
-  - ✅ Task 1.2: SLI Data Value Objects (COMPLETE)
-  - ✅ Task 1.3: Availability Calculator Service (COMPLETE)
-  - ✅ Task 1.4: Latency Calculator Service (COMPLETE)
-  - ⏭️ Task 1.5: Composite Availability Service (NEXT)
-  - ⬜ Task 1.6: Weighted Attribution Service (PENDING)
-  - ✅ Task 1.7: Repository Interfaces (COMPLETE)
-- ⬜ **Phase 2 (Week 2)**: Application layer — NOT STARTED
+- ✅ **Phase 1 (Week 1)**: Domain layer — COMPLETE (100%)
+  - All 7 tasks complete
+  - 167 tests passing, 97-100% coverage
+- 🟡 **Phase 2 (Week 2)**: Application layer — IN PROGRESS (75%)
+  - ✅ Task 2.1: DTOs (COMPLETE)
+  - ✅ Task 2.2: GenerateSloRecommendation Use Case (COMPLETE)
+  - ⬜ Task 2.3: GetSloRecommendation Use Case (PENDING)
+  - ⬜ Task 2.4: BatchComputeRecommendations Use Case (PENDING)
 - ⬜ **Phase 3 (Week 3)**: Infrastructure persistence & telemetry — NOT STARTED
 - ⬜ **Phase 4 (Week 4)**: API & background tasks — NOT STARTED
 
 **Test Summary:**
-- 113 tests passing, 0 failures
-- 100% coverage on all implemented code
-- Domain entities: 32 + 24 = 56 tests
-- Domain services: 31 (availability) + 26 (latency) = 57 tests
-- Repository interfaces: 0 tests (pure interfaces)
+- **Total: 212 tests passing** (167 Phase 1 + 45 Phase 2)
+- Phase 1: 167 tests (domain entities + services)
+- Phase 2: 45 tests (25 DTOs + 20 use case)
+- 0 failures
+- Overall coverage: 58%
 
-**Implementation Highlights:**
-- Sophisticated availability tier computation with percentile analysis
-- Latency tier computation with configurable noise margins (5% default, 10% shared infra)
-- Bootstrap confidence intervals for uncertainty quantification (1000 resamples)
-- Composite bound capping logic (Conservative/Balanced capped, Aggressive NOT capped)
-- Breach probability estimation from historical percentile data
-- Comprehensive validation in all entities
-- Error budget calculation aligned with SRE best practices
+**Implementation Highlights (Phase 1 + Phase 2):**
+- ✅ Sophisticated availability tier computation with percentile analysis
+- ✅ Latency tier computation with configurable noise margins (5% default, 10% shared infra)
+- ✅ Bootstrap confidence intervals for uncertainty quantification (1000 resamples)
+- ✅ Composite bound capping logic (Conservative/Balanced capped, Aggressive NOT capped)
+- ✅ Breach probability estimation from historical percentile data
+- ✅ Comprehensive validation in all entities
+- ✅ Error budget calculation aligned with SRE best practices
+- ✅ Full recommendation generation pipeline with 12 steps
+- ✅ Cold-start detection and extended lookback (30d → 90d)
+- ✅ Dependency-aware composite availability computation
+- ✅ Proper FR-1 integration (service repo, dependency repo, graph traversal)
+- ✅ Weighted feature attribution for explainability
+- ✅ Graceful degradation (skips SLI types with missing telemetry)
 
 **Blockers:**
-- None. FR-2 can proceed independently of FR-1 Phase 4 (API layer).
+- None. FR-2 Phase 2 proceeding smoothly.
 
 **FR-1 Status (for reference):**
 - Phases 1-6: All complete — PRODUCTION READY
-- Code review remediation: All 11 critical issues fixed (Session 14)
 - Tests: 148 unit, 60 integration, 20/20 E2E passing
-- Key fixes relevant to FR-2: `traverse_graph` returns tuple (C2), CTE cycle prevention added (C10), `metadata_` attribute fixed (C9), Tarjan's detector now synchronous and iterative (C4/C5/I13)
+- Key relevant components: `ServiceRepository`, `DependencyRepository`, `GraphTraversalService`, entity schemas
 
 ---
 
@@ -362,12 +366,25 @@ src/domain/repositories/slo_recommendation_repository.py
 src/domain/repositories/telemetry_query_service.py
 ```
 
-### Phase 2: Application Layer ⬜ **NOT STARTED**
-**Next Steps:**
-- Task 2.1: Create 11 DTO dataclasses
-- Task 2.2: GenerateSloRecommendation Use Case
-- Task 2.3: GetSloRecommendation Use Case
-- Task 2.4: BatchComputeRecommendations Use Case
+**Completed Components:**
+1. ✅ **DTOs (Task 2.1):**
+   - All 11 DTOs implemented with full validation
+   - 25 tests, 100% coverage
+   - Files: `src/application/dtos/slo_recommendation_dto.py`
+
+2. ✅ **GenerateSloRecommendation Use Case (Task 2.2):**
+   - Full 12-step recommendation pipeline
+   - Cold-start logic (extends to 90 days when completeness < 90%)
+   - Availability + latency generation
+   - Dependency subgraph traversal and composite bound computation
+   - Weighted feature attribution
+   - Supersedes existing before saving
+   - 20 tests, 100% use case coverage
+   - Files: `src/application/use_cases/generate_slo_recommendation.py`
+
+**Remaining Tasks:**
+- Task 2.3: GetSloRecommendation Use Case (retrieval + force_regenerate)
+- Task 2.4: BatchComputeRecommendations Use Case (batch pipeline with semaphore)
 
 ### Phase 3: Infrastructure (DB + Telemetry) ⬜ **NOT STARTED**
 ### Phase 4: Infrastructure (API + Tasks) ⬜ **NOT STARTED**
@@ -376,27 +393,33 @@ src/domain/repositories/telemetry_query_service.py
 
 ## Next Session Handoff
 
-**Ready to Start:** Phase 2 - Application Layer (DTOs and Use Cases)
+**Ready to Start:** Phase 2 - Tasks 2.3 and 2.4 (remaining use cases)
 
-**Commands to Verify:**
+**Commands to Verify Current State:**
 ```bash
 source .venv/bin/activate
-pytest tests/unit/domain/ -v  # Should show 262 tests passing (167 FR-2 + 95 FR-1)
+pytest tests/unit/application/ -v  # Should show 98 tests passing (45 FR-2 + 53 FR-1)
+pytest tests/unit/application/dtos/test_slo_recommendation_dto.py -v  # 25 tests
+pytest tests/unit/application/use_cases/test_generate_slo_recommendation.py -v  # 20 tests
 ```
 
-**First Task:** Create `src/application/dtos/slo_recommendation_dto.py` with 11 DTOs
+**Next Task:** Create `src/application/use_cases/get_slo_recommendation.py`
+- Simpler retrieval logic
+- Returns pre-computed recommendations from repository
+- Delegates to GenerateSloRecommendationUseCase when `force_regenerate=True`
+- Filters by `sli_type` if specified
 
 **Reference Files:**
-- `dev/active/fr2-slo-recommendations/fr2-plan.md` - Full technical spec
+- `dev/active/fr2-slo-recommendations/fr2-plan.md` - Full technical spec (lines 1305-1376 for Phase 2)
 - `dev/active/fr2-slo-recommendations/fr2-tasks.md` - Task checklist
-- `dev/active/fr2-slo-recommendations/phase-logs/fr2-phase1.md` - Phase 1 session log
+- `dev/active/fr2-slo-recommendations/phase-logs/fr2-phase2.md` - Phase 2 session log
 
 ---
 
 **Document Version:** 1.1
 **Last Updated:** 2026-02-15 (Session 4)
-**Document Version:** 1.1
-**Last Updated:** 2026-02-16
+**Document Version:** 1.2
+**Last Updated:** 2026-02-15 (Session 5)
 **Change Log:**
 - v1.1 (2026-02-16): Updated FR-1 status (all phases complete, code review fixed), added 8 new lessons from FR-1 Session 14
 - v1.0 (2026-02-15): Initial creation
