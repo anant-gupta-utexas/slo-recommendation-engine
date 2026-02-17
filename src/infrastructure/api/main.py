@@ -98,7 +98,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RateLimitMiddleware)  # Rate limiting
 
     # Register routes
-    from .routes import dependencies, health, recommendations
+    from .routes import constraint_analysis, dependencies, health, recommendations
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(
@@ -108,6 +108,11 @@ def create_app() -> FastAPI:
         recommendations.router,
         prefix="/api/v1/services",
         tags=["SLO Recommendations"],
+    )
+    app.include_router(
+        constraint_analysis.router,
+        prefix="/api/v1/services",
+        tags=["Constraint Analysis"],
     )
 
     # Register exception handlers for proper RFC 7807 format

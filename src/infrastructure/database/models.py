@@ -64,6 +64,16 @@ class ServiceModel(Base):
     # Discovered flag (true if auto-created from unknown edge reference)
     discovered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # FR-3: Service type (internal or external)
+    service_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="internal"
+    )
+
+    # FR-3: Published SLA for external services (as ratio, e.g., 0.9999 for 99.99%)
+    published_sla: Mapped[float | None] = mapped_column(
+        DECIMAL(precision=8, scale=6), nullable=True
+    )
+
     # Audit timestamps
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
@@ -81,6 +91,10 @@ class ServiceModel(Base):
         CheckConstraint(
             "criticality IN ('critical', 'high', 'medium', 'low')",
             name="ck_services_criticality",
+        ),
+        CheckConstraint(
+            "service_type IN ('internal', 'external')",
+            name="ck_service_type",
         ),
     )
 

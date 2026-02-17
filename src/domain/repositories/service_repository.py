@@ -100,3 +100,12 @@ class ServiceRepositoryInterface(ABC):
             ValueError: If service does not exist
         """
         pass
+
+    @abstractmethod
+    async def get_external_services(self) -> list["Service"]:
+        """Get all services with service_type='external'.
+
+        Returns:
+            List of Service entities with service_type=ServiceType.EXTERNAL
+        """
+        pass

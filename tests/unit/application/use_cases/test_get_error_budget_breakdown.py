@@ -1,7 +1,7 @@
 """Unit tests for GetErrorBudgetBreakdownUseCase."""
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from datetime import datetime, timezone, timedelta
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -24,6 +24,20 @@ from src.domain.entities.service_dependency import (
     ServiceDependency,
 )
 from src.domain.entities.sli_data import AvailabilitySliData
+
+
+def create_avail_sli(service_id: str, availability: float) -> AvailabilitySliData:
+    """Helper to create AvailabilitySliData with valid time windows."""
+    now = datetime.now(timezone.utc)
+    return AvailabilitySliData(
+        service_id=service_id,
+        good_events=int(availability * 100000),
+        total_events=100000,
+        availability_ratio=availability,
+        window_start=now - timedelta(days=30),
+        window_end=now,
+        sample_count=100000,
+    )
 
 
 @pytest.fixture
@@ -53,7 +67,7 @@ def mock_graph_traversal():
 @pytest.fixture
 def mock_external_buffer():
     """Mock external buffer service."""
-    mock = AsyncMock()
+    mock = Mock()
     mock.build_profile.return_value = ExternalProviderProfile(
         service_id="external-api",
         service_uuid=uuid4(),
@@ -67,7 +81,7 @@ def mock_external_buffer():
 @pytest.fixture
 def mock_budget_analyzer():
     """Mock error budget analyzer."""
-    mock = AsyncMock()
+    mock = Mock()
     mock.compute_breakdown.return_value = ErrorBudgetBreakdown(
         service_id="checkout-service",
         slo_target=99.9,
@@ -155,33 +169,9 @@ class TestGetErrorBudgetBreakdownUseCase:
 
         # Setup telemetry
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="inventory-service",
-                good_events=99900,
-                total_events=100000,
-                availability_ratio=0.9990,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("inventory-service", 0.9990),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Setup budget breakdown
@@ -245,24 +235,8 @@ class TestGetErrorBudgetBreakdownUseCase:
 
         # Setup telemetry for external service
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="external-payment-api",
-                good_events=99600,
-                total_events=100000,
-                availability_ratio=0.9960,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("external-payment-api", 0.9960),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Setup external buffer
@@ -328,24 +302,8 @@ class TestGetErrorBudgetBreakdownUseCase:
 
         # Setup telemetry (only for hard dep and service itself)
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Execute
@@ -388,24 +346,8 @@ class TestGetErrorBudgetBreakdownUseCase:
         )
 
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Execute
@@ -485,15 +427,7 @@ class TestGetErrorBudgetBreakdownUseCase:
 
         # Setup telemetry
         mock_telemetry.get_availability_sli.return_value = (
-            AvailabilitySliData(
-                service_id="isolated-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            )
+            create_avail_sli("isolated-service", 0.9992)
         )
 
         # Setup budget breakdown with only self consumption
@@ -547,24 +481,8 @@ class TestGetErrorBudgetBreakdownUseCase:
         )
 
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Execute with custom target

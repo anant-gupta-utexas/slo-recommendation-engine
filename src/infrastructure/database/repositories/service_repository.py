@@ -11,6 +11,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.entities.constraint_analysis import ServiceType
 from src.domain.entities.service import Criticality, Service
 from src.domain.repositories.service_repository import ServiceRepositoryInterface
 from src.infrastructure.database.models import ServiceModel
@@ -136,6 +137,8 @@ class ServiceRepository(ServiceRepositoryInterface):
                 "criticality": stmt.excluded.criticality,
                 "team": stmt.excluded.team,
                 "discovered": stmt.excluded.discovered,
+                "service_type": stmt.excluded.service_type,
+                "published_sla": stmt.excluded.published_sla,
                 "updated_at": stmt.excluded.updated_at,
             },
         ).returning(ServiceModel)
@@ -174,6 +177,8 @@ class ServiceRepository(ServiceRepositoryInterface):
                     ServiceModel.criticality: service.criticality.value,
                     ServiceModel.team: service.team,
                     ServiceModel.discovered: service.discovered,
+                    ServiceModel.service_type: service.service_type.value,
+                    ServiceModel.published_sla: service.published_sla,
                     ServiceModel.updated_at: service.updated_at,
                 }
             )
@@ -184,6 +189,18 @@ class ServiceRepository(ServiceRepositoryInterface):
         model = result.scalar_one()
 
         return self._to_entity(model)
+
+    async def get_external_services(self) -> list[Service]:
+        """Get all services with service_type='external'.
+
+        Returns:
+            List of Service entities with service_type=ServiceType.EXTERNAL
+        """
+        stmt = select(ServiceModel).where(ServiceModel.service_type == "external")
+        result = await self._session.execute(stmt)
+        models = result.scalars().all()
+
+        return [self._to_entity(model) for model in models]
 
     def _to_entity(self, model: ServiceModel) -> Service:
         """Convert SQLAlchemy model to domain entity.
@@ -201,6 +218,8 @@ class ServiceRepository(ServiceRepositoryInterface):
             criticality=Criticality(model.criticality),
             team=model.team,
             discovered=model.discovered,
+            service_type=ServiceType(model.service_type),
+            published_sla=float(model.published_sla) if model.published_sla is not None else None,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -221,6 +240,8 @@ class ServiceRepository(ServiceRepositoryInterface):
             criticality=entity.criticality.value,
             team=entity.team,
             discovered=entity.discovered,
+            service_type=entity.service_type.value,
+            published_sla=entity.published_sla,
             created_at=entity.created_at,
             updated_at=entity.updated_at,
         )
@@ -241,6 +262,8 @@ class ServiceRepository(ServiceRepositoryInterface):
             "criticality": entity.criticality.value,
             "team": entity.team,
             "discovered": entity.discovered,
+            "service_type": entity.service_type.value,
+            "published_sla": entity.published_sla,
             "created_at": entity.created_at,
             "updated_at": entity.updated_at,
         }

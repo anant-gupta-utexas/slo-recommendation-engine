@@ -14,6 +14,9 @@ from src.application.use_cases.detect_circular_dependencies import (
 from src.application.use_cases.generate_slo_recommendation import (
     GenerateSloRecommendationUseCase,
 )
+from src.application.use_cases.get_error_budget_breakdown import (
+    GetErrorBudgetBreakdownUseCase,
+)
 from src.application.use_cases.get_slo_recommendation import (
     GetSloRecommendationUseCase,
 )
@@ -23,14 +26,20 @@ from src.application.use_cases.ingest_dependency_graph import (
 from src.application.use_cases.query_dependency_subgraph import (
     QueryDependencySubgraphUseCase,
 )
+from src.application.use_cases.run_constraint_analysis import (
+    RunConstraintAnalysisUseCase,
+)
 from src.domain.services.availability_calculator import AvailabilityCalculator
 from src.domain.services.circular_dependency_detector import CircularDependencyDetector
 from src.domain.services.composite_availability_service import (
     CompositeAvailabilityService,
 )
 from src.domain.services.edge_merge_service import EdgeMergeService
+from src.domain.services.error_budget_analyzer import ErrorBudgetAnalyzer
+from src.domain.services.external_api_buffer_service import ExternalApiBufferService
 from src.domain.services.graph_traversal_service import GraphTraversalService
 from src.domain.services.latency_calculator import LatencyCalculator
+from src.domain.services.unachievable_slo_detector import UnachievableSloDetector
 from src.domain.services.weighted_attribution_service import (
     WeightedAttributionService,
 )
@@ -122,6 +131,21 @@ def get_weighted_attribution_service() -> WeightedAttributionService:
 def get_telemetry_service() -> MockPrometheusClient:
     """Get MockPrometheusClient instance (FR-2 telemetry source)."""
     return MockPrometheusClient()
+
+
+def get_external_api_buffer_service() -> ExternalApiBufferService:
+    """Get ExternalApiBufferService instance (FR-3 adaptive buffer)."""
+    return ExternalApiBufferService()
+
+
+def get_error_budget_analyzer() -> ErrorBudgetAnalyzer:
+    """Get ErrorBudgetAnalyzer instance (FR-3 budget computation)."""
+    return ErrorBudgetAnalyzer()
+
+
+def get_unachievable_slo_detector() -> UnachievableSloDetector:
+    """Get UnachievableSloDetector instance (FR-3 unachievability detection)."""
+    return UnachievableSloDetector()
 
 
 # Use case factories
@@ -217,4 +241,62 @@ async def get_get_slo_recommendation_use_case(
     return GetSloRecommendationUseCase(
         service_repo=service_repo,
         generate_use_case=generate_use_case,
+    )
+
+
+async def get_run_constraint_analysis_use_case(
+    service_repo: ServiceRepository = Depends(get_service_repository),
+    dependency_repo: DependencyRepository = Depends(get_dependency_repository),
+    alert_repo: CircularDependencyAlertRepository = Depends(
+        get_circular_dependency_alert_repository
+    ),
+    telemetry_service: MockPrometheusClient = Depends(get_telemetry_service),
+    graph_traversal_service: GraphTraversalService = Depends(
+        get_graph_traversal_service
+    ),
+    composite_service: CompositeAvailabilityService = Depends(
+        get_composite_availability_service
+    ),
+    external_buffer_service: ExternalApiBufferService = Depends(
+        get_external_api_buffer_service
+    ),
+    error_budget_analyzer: ErrorBudgetAnalyzer = Depends(get_error_budget_analyzer),
+    unachievable_detector: UnachievableSloDetector = Depends(
+        get_unachievable_slo_detector
+    ),
+) -> RunConstraintAnalysisUseCase:
+    """Get RunConstraintAnalysisUseCase instance (FR-3)."""
+    return RunConstraintAnalysisUseCase(
+        service_repository=service_repo,
+        dependency_repository=dependency_repo,
+        alert_repository=alert_repo,
+        telemetry_service=telemetry_service,
+        graph_traversal_service=graph_traversal_service,
+        composite_service=composite_service,
+        external_buffer_service=external_buffer_service,
+        error_budget_analyzer=error_budget_analyzer,
+        unachievable_detector=unachievable_detector,
+    )
+
+
+async def get_get_error_budget_breakdown_use_case(
+    service_repo: ServiceRepository = Depends(get_service_repository),
+    dependency_repo: DependencyRepository = Depends(get_dependency_repository),
+    telemetry_service: MockPrometheusClient = Depends(get_telemetry_service),
+    graph_traversal_service: GraphTraversalService = Depends(
+        get_graph_traversal_service
+    ),
+    external_buffer_service: ExternalApiBufferService = Depends(
+        get_external_api_buffer_service
+    ),
+    error_budget_analyzer: ErrorBudgetAnalyzer = Depends(get_error_budget_analyzer),
+) -> GetErrorBudgetBreakdownUseCase:
+    """Get GetErrorBudgetBreakdownUseCase instance (FR-3)."""
+    return GetErrorBudgetBreakdownUseCase(
+        service_repository=service_repo,
+        dependency_repository=dependency_repo,
+        telemetry_service=telemetry_service,
+        graph_traversal_service=graph_traversal_service,
+        external_buffer_service=external_buffer_service,
+        error_budget_analyzer=error_budget_analyzer,
     )

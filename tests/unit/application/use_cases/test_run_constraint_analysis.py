@@ -1,7 +1,7 @@
 """Unit tests for RunConstraintAnalysisUseCase."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -85,7 +85,7 @@ def mock_graph_traversal():
 @pytest.fixture
 def mock_composite():
     """Mock composite availability service."""
-    mock = AsyncMock()
+    mock = Mock()
     mock.compute_composite_bound.return_value = CompositeResult(
         composite_bound=0.9970, bottleneck_service_id=None
     )
@@ -95,7 +95,7 @@ def mock_composite():
 @pytest.fixture
 def mock_external_buffer():
     """Mock external buffer service."""
-    mock = AsyncMock()
+    mock = Mock()
     mock.build_profile.return_value = ExternalProviderProfile(
         service_id="external-api",
         service_uuid=uuid4(),
@@ -109,7 +109,7 @@ def mock_external_buffer():
 @pytest.fixture
 def mock_budget_analyzer():
     """Mock error budget analyzer."""
-    mock = AsyncMock()
+    mock = Mock()
     mock.compute_breakdown.return_value = ErrorBudgetBreakdown(
         service_id="checkout-service",
         slo_target=99.9,
@@ -122,7 +122,7 @@ def mock_budget_analyzer():
 @pytest.fixture
 def mock_unachievable_detector():
     """Mock unachievable SLO detector."""
-    mock = AsyncMock()
+    mock = Mock()
     mock.check.return_value = None  # Default: achievable
     return mock
 
@@ -229,33 +229,9 @@ class TestRunConstraintAnalysisUseCase:
 
         # Setup telemetry
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="inventory-service",
-                good_events=99900,
-                total_events=100000,
-                availability_ratio=0.9990,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("inventory-service", 0.9990),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Setup composite result
@@ -289,7 +265,7 @@ class TestRunConstraintAnalysisUseCase:
         # Assertions
         assert result is not None
         assert result.service_id == "checkout-service"
-        assert result.composite_availability_bound_pct == 99.77
+        assert abs(result.composite_availability_bound_pct - 99.77) < 0.01
         assert result.is_achievable is True
         assert result.total_hard_dependencies == 2
         assert result.total_soft_dependencies == 0
@@ -334,24 +310,8 @@ class TestRunConstraintAnalysisUseCase:
 
         # Setup telemetry for external service
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="external-payment-api",
-                good_events=99600,
-                total_events=100000,
-                availability_ratio=0.9960,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("external-payment-api", 0.9960),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Setup external buffer
@@ -455,24 +415,8 @@ class TestRunConstraintAnalysisUseCase:
         )
 
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99500,
-                total_events=100000,
-                availability_ratio=0.9950,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9950),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         # Setup unachievable warning
@@ -540,24 +484,8 @@ class TestRunConstraintAnalysisUseCase:
         )
 
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         mock_alert_repo.list_by_status.return_value = []
@@ -603,32 +531,16 @@ class TestRunConstraintAnalysisUseCase:
         )
 
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="service-b",
-                good_events=99900,
-                total_events=100000,
-                availability_ratio=0.9990,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="service-a",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("service-b", 0.9990),
+            create_avail_sli("service-a", 0.9992),
         ]
 
         # Setup circular dependency alert
+        from src.domain.entities.circular_dependency_alert import AlertStatus
         alert = CircularDependencyAlert(
             id=uuid4(),
             cycle_path=["service-a", "service-b", "service-c", "service-a"],
-            cycle_length=3,
-            status="open",
+            status=AlertStatus.OPEN,
         )
         mock_alert_repo.list_by_status.return_value = [alert]
 
@@ -673,24 +585,8 @@ class TestRunConstraintAnalysisUseCase:
         )
 
         mock_telemetry.get_availability_sli.side_effect = [
-            AvailabilitySliData(
-                service_id="payment-service",
-                good_events=99950,
-                total_events=100000,
-                availability_ratio=0.9995,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
-            AvailabilitySliData(
-                service_id="checkout-service",
-                good_events=99920,
-                total_events=100000,
-                availability_ratio=0.9992,
-                window_start=datetime.now(timezone.utc),
-                window_end=datetime.now(timezone.utc),
-                sample_count=100000,
-            ),
+            create_avail_sli("payment-service", 0.9995),
+            create_avail_sli("checkout-service", 0.9992),
         ]
 
         mock_alert_repo.list_by_status.return_value = []

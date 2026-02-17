@@ -9,6 +9,9 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
 
+# Import ServiceType from constraint_analysis for FR-3
+from src.domain.entities.constraint_analysis import ServiceType
+
 
 class Criticality(str, Enum):
     """Service criticality levels."""
@@ -33,6 +36,8 @@ class Service:
         criticality: Service criticality level
         team: Owning team identifier
         discovered: True if auto-created from unknown edge reference
+        service_type: Service type (internal or external) - FR-3
+        published_sla: Published SLA as ratio (e.g., 0.9999 for 99.99%) - FR-3, external only
         id: Internal UUID identifier
         created_at: Timestamp when service was created
         updated_at: Timestamp when service was last updated
@@ -43,6 +48,8 @@ class Service:
     criticality: Criticality = Criticality.MEDIUM
     team: str | None = None
     discovered: bool = False  # True if auto-created from unknown edge reference
+    service_type: ServiceType = ServiceType.INTERNAL  # FR-3: default to internal
+    published_sla: float | None = None  # FR-3: published SLA for external services
 
     # Audit fields
     id: UUID = field(default_factory=uuid4)
