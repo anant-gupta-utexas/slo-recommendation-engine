@@ -11,10 +11,10 @@
 | Phase | Status | Tasks | Completed | Notes |
 |-------|--------|-------|-----------|-------|
 | Phase 0: FR-2 Prerequisites | ✅ Complete | 3 | 3/3 | All FR-2 dependencies ready (74 tests passing) |
-| Phase 1: Domain Foundation | In Progress | 4 | 2/4 | FR-3 unique entities and services |
-| Phase 2: Application Layer | Not Started | 3 | 0/3 | Use cases and DTOs |
+| Phase 1: Domain Foundation | ✅ Complete | 4 | 4/4 | FR-3 unique entities and services |
+| Phase 2: Application Layer | ⚠️ Blocked | 3 | 3/3 | Code complete, blocked on Task 3.2 for testing |
 | Phase 3: Infrastructure | Not Started | 6 | 0/6 | Migration, API, DI, E2E |
-| **Total** | | **16** | **5/16** | Phase 0 complete, Phase 1 in progress (2/4 done) |
+| **Total** | | **16** | **10/16** | Phase 0-2 code complete, Phase 2 tests need Task 3.2 |
 
 ---
 
@@ -169,72 +169,72 @@
 
 ---
 
-### Task 1.3: ErrorBudgetAnalyzer [Effort: L]
+### Task 1.3: ErrorBudgetAnalyzer [Effort: L] ✅ **COMPLETE**
 
-- [ ] Create `src/domain/services/error_budget_analyzer.py`
-  - [ ] `HIGH_RISK_THRESHOLD = 0.30`
-  - [ ] `MODERATE_RISK_THRESHOLD = 0.20`
-  - [ ] `MONTHLY_MINUTES = 43200.0`
-  - [ ] `compute_breakdown(service_id, slo_target, service_availability, dependencies) -> ErrorBudgetBreakdown`
-    - [ ] Iterates hard sync deps
-    - [ ] Computes per-dep consumption
-    - [ ] Classifies risk levels
-    - [ ] Populates high_risk_dependencies list
-    - [ ] Computes self_consumption_pct
-    - [ ] Computes total_dependency_consumption_pct
-  - [ ] `compute_single_dependency_consumption(dep_availability, slo_target_pct) -> float`
-    - [ ] Formula: `(1 - dep_availability) / (1 - slo_target/100)`
-    - [ ] Returns infinity cap (999999.99) when slo_target = 100%
-  - [ ] `classify_risk(consumption_pct) -> RiskLevel`
-    - [ ] < 20% → LOW
-    - [ ] 20-30% → MODERATE
-    - [ ] > 30% → HIGH
-  - [ ] `compute_error_budget_minutes(slo_target_pct) -> float`
-    - [ ] Formula: `(1 - target/100) × 43200`
-    - [ ] 99.9% → 43.2 minutes
-- [ ] Create `tests/unit/domain/services/test_error_budget_analyzer.py` (>95% coverage)
-  - [ ] SLO=99.9%, dep=99.5% → consumption = 500%
-  - [ ] SLO=99.9%, dep=99.95% → consumption = 50%
-  - [ ] SLO=99.9%, dep=99.99% → consumption = 10%
-  - [ ] SLO=100%, dep=99.99% → consumption capped at 999999.99
-  - [ ] Risk classification: LOW, MODERATE, HIGH thresholds
-  - [ ] Full breakdown: multiple deps, high_risk list populated
-  - [ ] Error budget minutes: 99.9% → 43.2, 99% → 432
-  - [ ] Self consumption computed correctly
+- [x] Create `src/domain/services/error_budget_analyzer.py`
+  - [x] `HIGH_RISK_THRESHOLD = 0.30`
+  - [x] `MODERATE_RISK_THRESHOLD = 0.20`
+  - [x] `MONTHLY_MINUTES = 43200.0`
+  - [x] `compute_breakdown(service_id, slo_target, service_availability, dependencies) -> ErrorBudgetBreakdown`
+    - [x] Iterates hard sync deps
+    - [x] Computes per-dep consumption
+    - [x] Classifies risk levels
+    - [x] Populates high_risk_dependencies list
+    - [x] Computes self_consumption_pct
+    - [x] Computes total_dependency_consumption_pct
+  - [x] `compute_single_dependency_consumption(dep_availability, slo_target_pct) -> float`
+    - [x] Formula: `(1 - dep_availability) / (1 - slo_target/100)`
+    - [x] Returns infinity cap (999999.99) when slo_target = 100%
+  - [x] `classify_risk(consumption_pct) -> RiskLevel`
+    - [x] < 20% → LOW
+    - [x] 20-30% → MODERATE
+    - [x] > 30% → HIGH
+  - [x] `compute_error_budget_minutes(slo_target_pct) -> float`
+    - [x] Formula: `(1 - target/100) × 43200`
+    - [x] 99.9% → 43.2 minutes
+- [x] Create `tests/unit/domain/services/test_error_budget_analyzer.py` (98% coverage, 25 tests)
+  - [x] SLO=99.9%, dep=99.5% → consumption = 500%
+  - [x] SLO=99.9%, dep=99.95% → consumption = 50%
+  - [x] SLO=99.9%, dep=99.99% → consumption = 10%
+  - [x] SLO=100%, dep=99.99% → consumption capped at 999999.99
+  - [x] Risk classification: LOW, MODERATE, HIGH thresholds
+  - [x] Full breakdown: multiple deps, high_risk list populated
+  - [x] Error budget minutes: 99.9% → 43.2, 99% → 432
+  - [x] Self consumption computed correctly
 
-**Files to Create:** 2
-**Dependencies:** Task 1.1
-**Testing:** Unit tests with known-answer vectors
+**Files Created:** 2
+**Dependencies:** Task 1.1 ✅
+**Testing:** Unit tests with known-answer vectors ✅
 
 ---
 
-### Task 1.4: UnachievableSloDetector [Effort: M]
+### Task 1.4: UnachievableSloDetector [Effort: M] ✅ **COMPLETE**
 
-- [ ] Create `src/domain/services/unachievable_slo_detector.py`
-  - [ ] `check(desired_target_pct, composite_bound, hard_dependency_count) -> UnachievableWarning | None`
-    - [ ] Returns None when `composite_bound >= desired_target_pct / 100`
-    - [ ] Returns UnachievableWarning when unachievable
-    - [ ] Computes gap as `desired - composite * 100`
-  - [ ] `compute_required_dep_availability(desired_target_pct, hard_dependency_count) -> float`
-    - [ ] Formula: `1 - (1 - target/100) / (N + 1)`
-    - [ ] Edge case: 0 deps → required = target itself
-    - [ ] 99.99% with 3 deps → 99.9975%
-  - [ ] `generate_warning_message(desired_target_pct, composite_bound_pct) -> str`
-    - [ ] Matches TRD: "The desired target of X% is unachievable. Composite availability bound is Y% given current dependency chain."
-  - [ ] `generate_remediation_guidance(desired_target_pct, required_pct, n_hard_deps) -> str`
-    - [ ] 3 concrete suggestions: redundant paths, async conversion, target relaxation
-- [ ] Create `tests/unit/domain/services/test_unachievable_slo_detector.py` (>95% coverage)
-  - [ ] Achievable: target=99.9%, bound=0.998 → None
-  - [ ] Unachievable: target=99.99%, bound=0.997 → warning
-  - [ ] 10x rule: 99.99% with 3 deps → 99.9975%
-  - [ ] 0 deps: required = target
-  - [ ] Tiny gap (< 0.01%): still flagged
-  - [ ] Warning message matches TRD format
-  - [ ] Remediation guidance contains 3 suggestions
+- [x] Create `src/domain/services/unachievable_slo_detector.py`
+  - [x] `check(desired_target_pct, composite_bound, hard_dependency_count) -> UnachievableWarning | None`
+    - [x] Returns None when `composite_bound >= desired_target_pct / 100`
+    - [x] Returns UnachievableWarning when unachievable
+    - [x] Computes gap as `desired - composite * 100`
+  - [x] `compute_required_dep_availability(desired_target_pct, hard_dependency_count) -> float`
+    - [x] Formula: `1 - (1 - target/100) / (N + 1)`
+    - [x] Edge case: 0 deps → required = target itself
+    - [x] 99.99% with 3 deps → 99.9975%
+  - [x] `generate_warning_message(desired_target_pct, composite_bound_pct) -> str`
+    - [x] Matches TRD: "The desired target of X% is unachievable. Composite availability bound is Y% given current dependency chain."
+  - [x] `generate_remediation_guidance(desired_target_pct, required_pct, n_hard_deps) -> str`
+    - [x] 3 concrete suggestions: redundant paths, async conversion, target relaxation
+- [x] Create `tests/unit/domain/services/test_unachievable_slo_detector.py` (100% coverage, 23 tests)
+  - [x] Achievable: target=99.9%, bound=0.9995 → None
+  - [x] Unachievable: target=99.99%, bound=0.997 → warning
+  - [x] 10x rule: 99.99% with 3 deps → 99.9975%
+  - [x] 0 deps: required = target
+  - [x] Tiny gap (< 0.01%): still flagged
+  - [x] Warning message matches TRD format
+  - [x] Remediation guidance contains 3 suggestions
 
-**Files to Create:** 2
-**Dependencies:** Task 1.1
-**Testing:** Unit tests with TRD validation vectors
+**Files Created:** 2
+**Dependencies:** Task 1.1 ✅
+**Testing:** Unit tests with TRD validation vectors ✅
 
 ---
 
@@ -242,29 +242,29 @@
 
 **Objective:** Implement use cases, DTOs, and wire up domain services.
 
-### Task 2.1: Constraint Analysis DTOs [Effort: M]
+### Task 2.1: Constraint Analysis DTOs [Effort: M] ✅ **COMPLETE**
 
-- [ ] Create `src/application/dtos/constraint_analysis_dto.py`
-  - [ ] `ConstraintAnalysisRequest` (service_id, desired_target_pct, lookback_days, max_depth)
-  - [ ] `ErrorBudgetBreakdownRequest` (service_id, slo_target_pct, lookback_days)
-  - [ ] `DependencyRiskDTO` (service_id, availability_pct, error_budget_consumption_pct, risk_level, is_external, etc.)
-  - [ ] `UnachievableWarningDTO` (desired_target_pct, composite_bound_pct, gap_pct, message, guidance, required_pct)
-  - [ ] `ErrorBudgetBreakdownDTO` (service_id, slo_target_pct, total_budget_minutes, self_consumption, risks, high_risk list)
-  - [ ] `ConstraintAnalysisResponse` (full response DTO with all fields)
-  - [ ] `ErrorBudgetBreakdownResponse` (budget-only response DTO)
-  - [ ] All DTOs use dataclasses (not Pydantic)
-  - [ ] Percentages use `_pct` suffix convention
-- [ ] Create `tests/unit/application/dtos/test_constraint_analysis_dto.py` (>90% coverage)
+- [x] Create `src/application/dtos/constraint_analysis_dto.py`
+  - [x] `ConstraintAnalysisRequest` (service_id, desired_target_pct, lookback_days, max_depth)
+  - [x] `ErrorBudgetBreakdownRequest` (service_id, slo_target_pct, lookback_days)
+  - [x] `DependencyRiskDTO` (service_id, availability_pct, error_budget_consumption_pct, risk_level, is_external, etc.)
+  - [x] `UnachievableWarningDTO` (desired_target_pct, composite_bound_pct, gap_pct, message, guidance, required_pct)
+  - [x] `ErrorBudgetBreakdownDTO` (service_id, slo_target_pct, total_budget_minutes, self_consumption, risks, high_risk list)
+  - [x] `ConstraintAnalysisResponse` (full response DTO with all fields)
+  - [x] `ErrorBudgetBreakdownResponse` (budget-only response DTO)
+  - [x] All DTOs use dataclasses (not Pydantic)
+  - [x] Percentages use `_pct` suffix convention
+- [x] Create `tests/unit/application/dtos/test_constraint_analysis_dto.py` (100% coverage, 19 tests)
 
-**Files to Create:** 2
-**Dependencies:** Phase 1 complete
-**Testing:** Unit tests
+**Files Created:** 2
+**Dependencies:** Phase 1 complete ✅
+**Testing:** Unit tests ✅
 
 ---
 
-### Task 2.2: RunConstraintAnalysisUseCase [Effort: XL]
+### Task 2.2: RunConstraintAnalysisUseCase [Effort: XL] ✅ **CODE COMPLETE** (tests blocked on Task 3.2)
 
-- [ ] Create `src/application/use_cases/run_constraint_analysis.py`
+- [x] Create `src/application/use_cases/run_constraint_analysis.py`
   - [ ] Constructor with 8 injected dependencies
   - [ ] `async execute(request: ConstraintAnalysisRequest) -> ConstraintAnalysisResponse | None`
   - [ ] Step 1: Validate service exists (return None if not found)
@@ -298,9 +298,9 @@
 
 ---
 
-### Task 2.3: GetErrorBudgetBreakdownUseCase [Effort: L]
+### Task 2.3: GetErrorBudgetBreakdownUseCase [Effort: L] ✅ **CODE COMPLETE** (tests blocked on Task 3.2)
 
-- [ ] Create `src/application/use_cases/get_error_budget_breakdown.py`
+- [x] Create `src/application/use_cases/get_error_budget_breakdown.py`
   - [ ] Constructor with 5 injected dependencies
   - [ ] `async execute(request: ErrorBudgetBreakdownRequest) -> ErrorBudgetBreakdownResponse | None`
   - [ ] Retrieves direct dependencies only (depth=1)
