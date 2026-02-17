@@ -19,6 +19,8 @@ from src.infrastructure.api.dependencies import get_get_slo_recommendation_use_c
 from src.infrastructure.api.middleware.auth import verify_api_key
 from src.infrastructure.api.schemas.error_schema import ProblemDetails
 from src.infrastructure.api.schemas.slo_recommendation_schema import (
+    CounterfactualApiModel,
+    DataProvenanceApiModel,
     DataQualityApiModel,
     DependencyImpactApiModel,
     ExplanationApiModel,
@@ -181,11 +183,38 @@ async def get_slo_recommendations(
                     soft_dependency_count=dep.soft_dependency_count,
                 )
 
+            # Convert counterfactuals (FR-7)
+            counterfactuals_api = [
+                CounterfactualApiModel(
+                    condition=cf.condition,
+                    result=cf.result,
+                    feature=cf.feature,
+                    original_value=cf.original_value,
+                    perturbed_value=cf.perturbed_value,
+                )
+                for cf in (rec.explanation.counterfactuals or [])
+            ]
+
+            # Convert provenance (FR-7)
+            provenance_api = None
+            if rec.explanation.provenance:
+                prov = rec.explanation.provenance
+                provenance_api = DataProvenanceApiModel(
+                    dependency_graph_version=prov.dependency_graph_version,
+                    telemetry_window_start=prov.telemetry_window_start,
+                    telemetry_window_end=prov.telemetry_window_end,
+                    data_completeness=prov.data_completeness,
+                    computation_method=prov.computation_method,
+                    telemetry_source=prov.telemetry_source,
+                )
+
             # Convert explanation
             explanation_api = ExplanationApiModel(
                 summary=rec.explanation.summary,
                 feature_attribution=feature_attribution_api,
                 dependency_impact=dependency_impact_api,
+                counterfactuals=counterfactuals_api,
+                provenance=provenance_api,
             )
 
             # Convert data quality

@@ -126,6 +126,64 @@ class DependencyImpactApiModel(BaseModel):
     )
 
 
+class CounterfactualApiModel(BaseModel):
+    """A single counterfactual 'what-if' statement (FR-7)."""
+
+    condition: str = Field(..., description="What-if condition")
+    result: str = Field(..., description="Predicted outcome")
+    feature: str = Field(default="", description="Feature that was perturbed")
+    original_value: float = Field(default=0.0, description="Original feature value")
+    perturbed_value: float = Field(default=0.0, description="Perturbed feature value")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "condition": "If external API reliability improved to 99.99%",
+                "result": "Recommended target would increase to 99.95%",
+                "feature": "external_api_reliability",
+                "original_value": 0.999,
+                "perturbed_value": 0.9995,
+            }
+        }
+    )
+
+
+class DataProvenanceApiModel(BaseModel):
+    """Data provenance metadata (FR-7)."""
+
+    dependency_graph_version: str = Field(
+        default="", description="Timestamp of the graph snapshot used"
+    )
+    telemetry_window_start: str = Field(
+        default="", description="Start of telemetry window (ISO 8601)"
+    )
+    telemetry_window_end: str = Field(
+        default="", description="End of telemetry window (ISO 8601)"
+    )
+    data_completeness: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Data completeness score"
+    )
+    computation_method: str = Field(
+        default="", description="Algorithm used for computation"
+    )
+    telemetry_source: str = Field(
+        default="", description="Source of telemetry data"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "dependency_graph_version": "2026-02-16T10:00:00Z",
+                "telemetry_window_start": "2026-01-17T10:00:00Z",
+                "telemetry_window_end": "2026-02-16T10:00:00Z",
+                "data_completeness": 0.97,
+                "computation_method": "composite_reliability_math_v1",
+                "telemetry_source": "mock_prometheus",
+            }
+        }
+    )
+
+
 class ExplanationApiModel(BaseModel):
     """Full explanation for a recommendation."""
 
@@ -135,6 +193,12 @@ class ExplanationApiModel(BaseModel):
     )
     dependency_impact: DependencyImpactApiModel | None = Field(
         None, description="Dependency impact analysis (availability only)"
+    )
+    counterfactuals: list[CounterfactualApiModel] = Field(
+        default_factory=list, description="What-if counterfactual statements (FR-7)"
+    )
+    provenance: DataProvenanceApiModel | None = Field(
+        None, description="Data provenance metadata (FR-7)"
     )
 
     model_config = ConfigDict(
@@ -154,6 +218,19 @@ class ExplanationApiModel(BaseModel):
                     "bottleneck_contribution": "Consumes 50% of error budget",
                     "hard_dependency_count": 3,
                     "soft_dependency_count": 1,
+                },
+                "counterfactuals": [
+                    {
+                        "condition": "If external API reliability improved to 99.99%",
+                        "result": "Recommended target would increase to 99.95%",
+                        "feature": "external_api_reliability",
+                    }
+                ],
+                "provenance": {
+                    "dependency_graph_version": "2026-02-16T10:00:00Z",
+                    "data_completeness": 0.97,
+                    "computation_method": "composite_reliability_math_v1",
+                    "telemetry_source": "mock_prometheus",
                 },
             }
         }

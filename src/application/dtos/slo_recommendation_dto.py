@@ -68,12 +68,37 @@ class DependencyImpactDTO:
 
 
 @dataclass
+class CounterfactualDTO:
+    """A single counterfactual "what-if" statement (FR-7)."""
+
+    condition: str
+    result: str
+    feature: str = ""
+    original_value: float = 0.0
+    perturbed_value: float = 0.0
+
+
+@dataclass
+class DataProvenanceDTO:
+    """Data provenance metadata (FR-7)."""
+
+    dependency_graph_version: str = ""
+    telemetry_window_start: str = ""
+    telemetry_window_end: str = ""
+    data_completeness: float = 0.0
+    computation_method: str = ""
+    telemetry_source: str = ""
+
+
+@dataclass
 class ExplanationDTO:
     """Full explanation for a recommendation."""
 
     summary: str
     feature_attribution: list[FeatureAttributionDTO] = field(default_factory=list)
     dependency_impact: DependencyImpactDTO | None = None
+    counterfactuals: list[CounterfactualDTO] = field(default_factory=list)
+    provenance: DataProvenanceDTO | None = None
 
 
 @dataclass

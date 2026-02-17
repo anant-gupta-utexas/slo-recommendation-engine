@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from src.application.dtos.slo_recommendation_dto import (
+    CounterfactualDTO,
+    DataProvenanceDTO,
     DataQualityDTO,
     DependencyImpactDTO,
     ExplanationDTO,
@@ -24,6 +26,8 @@ from src.domain.entities.service_dependency import (
 )
 from src.domain.entities.sli_data import AvailabilitySliData, LatencySliData
 from src.domain.entities.slo_recommendation import (
+    Counterfactual,
+    DataProvenance,
     DataQuality,
     DependencyImpact,
     Explanation,
@@ -34,6 +38,7 @@ from src.domain.entities.slo_recommendation import (
     SloRecommendation,
     TierLevel,
 )
+from src.domain.services.counterfactual_service import CounterfactualService
 from src.domain.repositories.dependency_repository import (
     DependencyRepositoryInterface,
 )
@@ -98,6 +103,7 @@ class GenerateSloRecommendationUseCase:
         composite_service: CompositeAvailabilityService,
         attribution_service: WeightedAttributionService,
         graph_traversal_service: GraphTraversalService,
+        counterfactual_service: CounterfactualService | None = None,
     ):
         self.service_repository = service_repository
         self.dependency_repository = dependency_repository
@@ -108,6 +114,7 @@ class GenerateSloRecommendationUseCase:
         self.composite_service = composite_service
         self.attribution_service = attribution_service
         self.graph_traversal_service = graph_traversal_service
+        self.counterfactual_service = counterfactual_service or CounterfactualService()
 
     async def execute(
         self, request: GenerateRecommendationRequest
@@ -322,13 +329,46 @@ class GenerateSloRecommendationUseCase:
             lookback_days,
         )
 
+        # FR-7: Generate counterfactuals
+        fa_list = [
+            FeatureAttribution(a.feature, a.contribution, a.description)
+            for a in attributions
+        ]
+        counterfactuals_raw = self.counterfactual_service.generate_counterfactuals(
+            sli_type="availability",
+            current_target=tiers_domain[TierLevel.BALANCED].target,
+            feature_attributions=fa_list,
+            feature_values=feature_values,
+        )
+        counterfactuals_domain = [
+            Counterfactual(
+                condition=cf.condition,
+                result=cf.result,
+                feature=cf.feature,
+                original_value=cf.original_value,
+                perturbed_value=cf.perturbed_value,
+            )
+            for cf in counterfactuals_raw
+        ]
+
+        data_completeness = await self.telemetry_service.get_data_completeness(
+            service_id, lookback_days
+        )
+
+        # FR-7: Build data provenance
+        provenance = DataProvenance(
+            dependency_graph_version=window_end.isoformat(),
+            telemetry_window_start=window_start.isoformat(),
+            telemetry_window_end=window_end.isoformat(),
+            data_completeness=data_completeness,
+            computation_method="composite_reliability_math_v1",
+            telemetry_source="mock_prometheus",
+        )
+
         # Build domain entities
         explanation_domain = Explanation(
             summary=summary,
-            feature_attribution=[
-                FeatureAttribution(a.feature, a.contribution, a.description)
-                for a in attributions
-            ],
+            feature_attribution=fa_list,
             dependency_impact=DependencyImpact(
                 composite_availability_bound=composite_result.composite_bound,
                 bottleneck_service=composite_result.bottleneck_service_name,
@@ -336,11 +376,10 @@ class GenerateSloRecommendationUseCase:
                 hard_dependency_count=len(hard_deps),
                 soft_dependency_count=soft_dep_count,
             ),
+            counterfactuals=counterfactuals_domain,
+            provenance=provenance,
         )
 
-        data_completeness = await self.telemetry_service.get_data_completeness(
-            service_id, lookback_days
-        )
         data_quality_domain = DataQuality(
             data_completeness=data_completeness,
             telemetry_gaps=[],  # Populated if gaps detected
@@ -424,19 +463,51 @@ class GenerateSloRecommendationUseCase:
             lookback_days,
         )
 
-        # Build domain entities
-        explanation_domain = Explanation(
-            summary=summary,
-            feature_attribution=[
-                FeatureAttribution(a.feature, a.contribution, a.description)
-                for a in attributions
-            ],
-            dependency_impact=None,  # Latency doesn't use dependency impact
+        # FR-7: Generate counterfactuals for latency
+        fa_list = [
+            FeatureAttribution(a.feature, a.contribution, a.description)
+            for a in attributions
+        ]
+        counterfactuals_raw = self.counterfactual_service.generate_counterfactuals(
+            sli_type="latency",
+            current_target=tiers_domain[TierLevel.BALANCED].target_ms or tiers_domain[TierLevel.BALANCED].target,
+            feature_attributions=fa_list,
+            feature_values=feature_values,
         )
+        counterfactuals_domain = [
+            Counterfactual(
+                condition=cf.condition,
+                result=cf.result,
+                feature=cf.feature,
+                original_value=cf.original_value,
+                perturbed_value=cf.perturbed_value,
+            )
+            for cf in counterfactuals_raw
+        ]
 
         data_completeness = await self.telemetry_service.get_data_completeness(
             service_id, lookback_days
         )
+
+        # FR-7: Build data provenance
+        provenance = DataProvenance(
+            dependency_graph_version=window_end.isoformat(),
+            telemetry_window_start=window_start.isoformat(),
+            telemetry_window_end=window_end.isoformat(),
+            data_completeness=data_completeness,
+            computation_method="percentile_analysis_v1",
+            telemetry_source="mock_prometheus",
+        )
+
+        # Build domain entities
+        explanation_domain = Explanation(
+            summary=summary,
+            feature_attribution=fa_list,
+            dependency_impact=None,  # Latency doesn't use dependency impact
+            counterfactuals=counterfactuals_domain,
+            provenance=provenance,
+        )
+
         data_quality_domain = DataQuality(
             data_completeness=data_completeness,
             telemetry_gaps=[],
@@ -567,6 +638,28 @@ class GenerateSloRecommendationUseCase:
                     soft_dependency_count=explanation_domain.dependency_impact.soft_dependency_count,
                 )
                 if explanation_domain.dependency_impact
+                else None
+            ),
+            counterfactuals=[
+                CounterfactualDTO(
+                    condition=cf.condition,
+                    result=cf.result,
+                    feature=cf.feature,
+                    original_value=cf.original_value,
+                    perturbed_value=cf.perturbed_value,
+                )
+                for cf in explanation_domain.counterfactuals
+            ],
+            provenance=(
+                DataProvenanceDTO(
+                    dependency_graph_version=explanation_domain.provenance.dependency_graph_version,
+                    telemetry_window_start=explanation_domain.provenance.telemetry_window_start,
+                    telemetry_window_end=explanation_domain.provenance.telemetry_window_end,
+                    data_completeness=explanation_domain.provenance.data_completeness,
+                    computation_method=explanation_domain.provenance.computation_method,
+                    telemetry_source=explanation_domain.provenance.telemetry_source,
+                )
+                if explanation_domain.provenance
                 else None
             ),
         )

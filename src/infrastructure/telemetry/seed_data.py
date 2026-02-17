@@ -204,6 +204,94 @@ SEED_DATA = {
         },
         "days_available": 0,
     },
+    # Scenario 9: API Gateway (high-traffic entry point for demo)
+    "api-gateway": {
+        "availability": {
+            "base": 0.9995,  # 99.95% availability (entry point, very stable)
+            "variance": 0.0005,
+            "good_events": 49_975_000,
+            "total_events": 50_000_000,
+            "sample_count": 720,
+        },
+        "latency": {
+            "p50_ms": 15.0,
+            "p95_ms": 50.0,
+            "p99_ms": 120.0,
+            "p999_ms": 250.0,
+            "sample_count": 720,
+        },
+        "completeness": {
+            "30_days": 0.99,
+            "90_days": 0.98,
+        },
+        "days_available": 30,
+    },
+    # Scenario 10: Checkout Service (mid-tier, depends on payment + inventory)
+    "checkout-service": {
+        "availability": {
+            "base": 0.9970,  # 99.7% availability
+            "variance": 0.002,
+            "good_events": 14_955_000,
+            "total_events": 15_000_000,
+            "sample_count": 720,
+        },
+        "latency": {
+            "p50_ms": 80.0,
+            "p95_ms": 200.0,
+            "p99_ms": 450.0,
+            "p999_ms": 900.0,
+            "sample_count": 720,
+        },
+        "completeness": {
+            "30_days": 0.97,
+            "90_days": 0.96,
+        },
+        "days_available": 30,
+    },
+    # Scenario 11: User Service (authentication/profile, depended on by many)
+    "user-service": {
+        "availability": {
+            "base": 0.9985,  # 99.85% availability
+            "variance": 0.001,
+            "good_events": 9_985_000,
+            "total_events": 10_000_000,
+            "sample_count": 720,
+        },
+        "latency": {
+            "p50_ms": 20.0,
+            "p95_ms": 60.0,
+            "p99_ms": 130.0,
+            "p999_ms": 280.0,
+            "sample_count": 720,
+        },
+        "completeness": {
+            "30_days": 0.99,
+            "90_days": 0.98,
+        },
+        "days_available": 30,
+    },
+    # Scenario 12: Inventory Service (moderate load, depended on by checkout)
+    "inventory-service": {
+        "availability": {
+            "base": 0.9960,  # 99.6% availability
+            "variance": 0.003,
+            "good_events": 7_470_000,
+            "total_events": 7_500_000,
+            "sample_count": 720,
+        },
+        "latency": {
+            "p50_ms": 35.0,
+            "p95_ms": 100.0,
+            "p99_ms": 220.0,
+            "p999_ms": 450.0,
+            "sample_count": 720,
+        },
+        "completeness": {
+            "30_days": 0.97,
+            "90_days": 0.95,
+        },
+        "days_available": 30,
+    },
 }
 
 

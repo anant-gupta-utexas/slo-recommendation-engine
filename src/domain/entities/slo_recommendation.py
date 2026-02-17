@@ -150,6 +150,46 @@ class DataQuality:
 
 
 @dataclass
+class Counterfactual:
+    """A single counterfactual "what-if" statement for FR-7 explainability.
+
+    Attributes:
+        condition: Human-readable condition (e.g., "If external-payment-api improved to 99.99%")
+        result: Human-readable result (e.g., "Recommended target would increase to 99.95%")
+        feature: The feature that was perturbed
+        original_value: Original feature value
+        perturbed_value: Perturbed feature value
+    """
+
+    condition: str
+    result: str
+    feature: str = ""
+    original_value: float = 0.0
+    perturbed_value: float = 0.0
+
+
+@dataclass
+class DataProvenance:
+    """Data provenance metadata for FR-7 explainability.
+
+    Attributes:
+        dependency_graph_version: Timestamp of the graph snapshot used
+        telemetry_window_start: Start of telemetry window (ISO 8601)
+        telemetry_window_end: End of telemetry window (ISO 8601)
+        data_completeness: Data completeness score (0.0-1.0)
+        computation_method: Algorithm used for computation
+        telemetry_source: Source of telemetry data
+    """
+
+    dependency_graph_version: str = ""
+    telemetry_window_start: str = ""
+    telemetry_window_end: str = ""
+    data_completeness: float = 0.0
+    computation_method: str = "composite_reliability_math_v1"
+    telemetry_source: str = "mock_prometheus"
+
+
+@dataclass
 class Explanation:
     """Full explanation for a recommendation.
 
@@ -157,11 +197,15 @@ class Explanation:
         summary: High-level summary of the recommendation
         feature_attribution: List of feature contributions
         dependency_impact: Dependency impact analysis (availability only)
+        counterfactuals: List of "what-if" counterfactual statements (FR-7)
+        provenance: Data provenance metadata (FR-7)
     """
 
     summary: str
     feature_attribution: list[FeatureAttribution] = field(default_factory=list)
     dependency_impact: DependencyImpact | None = None
+    counterfactuals: list[Counterfactual] = field(default_factory=list)
+    provenance: DataProvenance | None = None
 
 
 @dataclass
