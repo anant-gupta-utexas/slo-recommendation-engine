@@ -1,8 +1,8 @@
 # FR-3: Dependency-Aware Constraint Propagation — Task Tracker
 
 **Created:** 2026-02-15
-**Status:** Not Started
-**Estimated Duration:** 3 weeks (15 working days)
+**Status:** Nearly Complete (16/16 tasks, 5 E2E tests need debugging)
+**Last Updated:** 2026-02-17
 
 ---
 

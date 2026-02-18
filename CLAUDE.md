@@ -27,6 +27,9 @@ ruff check . && ruff format --check . && mypy src/ --strict
 - Swagger UI: http://localhost:8000/docs
 - Prometheus: http://localhost:9090
 - Health: http://localhost:8000/api/v1/health
+- SLO Recommendations: http://localhost:8000/api/v1/services/{id}/slo-recommendations
+- Constraint Analysis: http://localhost:8000/api/v1/services/{id}/constraint-analysis
+- Error Budget: http://localhost:8000/api/v1/services/{id}/error-budget-breakdown
 
 ## Directory Structure & Walkthrough
 
@@ -36,7 +39,7 @@ ruff check . && ruff format --check . && mypy src/ --strict
 docs/
 ├── 1_product/      # "Why": Product Requirements (PRD.md), research
 ├── 2_architecture/ # "High-Level How": System Design (system_design.md), TRD
-├── 3_guides/       # "How-to": getting_started.md, core_concepts.md, dependency_graph_guide.md
+├── 3_guides/       # "How-to": getting_started.md, core_concepts.md, dependency_graph_guide.md, slo_recommendations_guide.md, constraint_propagation_guide.md
 └── 4_testing/      # "Quality": Testing strategy, examples, coverage goals (index.md)
 ```
 
@@ -111,8 +114,8 @@ Dockerfile          # Multi-stage build (base → api)
 | Feature | Status | Key Files |
 |---------|--------|-----------|
 | **FR-1** Dependency Graph | Production Ready | `src/domain/entities/service_dependency.py`, `src/application/use_cases/ingest_dependency_graph.py`, `src/infrastructure/api/routes/dependencies.py` |
-| **FR-2** SLO Recommendations | Not Started | — |
-| **FR-3** Composite SLOs | Not Started | — |
+| **FR-2** SLO Recommendations | Complete (339 tests) | `src/domain/services/availability_calculator.py`, `src/application/use_cases/generate_slo_recommendation.py`, `src/infrastructure/api/routes/recommendations.py` |
+| **FR-3** Constraint Propagation | Nearly Complete (5 E2E tests need debugging) | `src/domain/services/error_budget_analyzer.py`, `src/application/use_cases/run_constraint_analysis.py`, `src/infrastructure/api/routes/constraint_analysis.py` |
 | **FR-4** Impact Analysis | Not Started | — |
 
 ## Key Technical Decisions
@@ -136,6 +139,7 @@ uvicorn src.infrastructure.api.main:app --reload  # Dev server (needs DB/Redis r
 # Testing
 pytest tests/unit/ tests/integration/ -v     # All tests (recommended)
 pytest tests/unit/domain/ -v                 # Fast domain tests
+pytest tests/e2e/ -v                         # E2E tests (requires docker-compose up)
 pytest --cov=src --cov-report=term-missing   # Coverage report
 
 # Code quality

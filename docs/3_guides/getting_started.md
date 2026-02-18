@@ -1,7 +1,7 @@
 # Getting Started
 
-> **Last Updated:** 2026-02-15
-> **Applies to:** SLO Recommendation Engine v0.1 (FR-1: Service Dependency Graph)
+> **Last Updated:** 2026-02-17
+> **Applies to:** SLO Recommendation Engine v0.3 (FR-1, FR-2, FR-3)
 
 ---
 
@@ -441,6 +441,8 @@ pytest tests/integration/ -v
 
 - Read [Core Concepts](core_concepts.md) to understand Clean Architecture patterns
 - Read the [Dependency Graph Developer Guide](dependency_graph_guide.md) for FR-1 feature details
+- Read the [SLO Recommendations Guide](slo_recommendations_guide.md) for FR-2 feature details
+- Read the [Constraint Propagation Guide](constraint_propagation_guide.md) for FR-3 feature details
 - Review [System Design](../2_architecture/system_design.md) for architecture overview
 - Check [Testing Guide](../4_testing/index.md) for testing patterns and examples
 - Explore the API via Swagger UI at http://localhost:8000/docs

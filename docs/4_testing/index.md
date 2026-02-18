@@ -1,7 +1,7 @@
 # Testing Documentation
 
-> **Last Updated:** 2026-02-15
-> **Applies to:** SLO Recommendation Engine v0.1 (FR-1: Service Dependency Graph)
+> **Last Updated:** 2026-02-17
+> **Applies to:** SLO Recommendation Engine v0.3 (FR-1, FR-2, FR-3)
 
 ---
 
@@ -34,20 +34,20 @@ We follow a comprehensive testing strategy aligned with Clean Architecture. Each
 
 ```
            /\
-          /  \          E2E Tests (20 tests)
+          /  \          E2E Tests (~29 tests)
          /    \         Full API workflows via HTTP
         /------\
-       /        \       Integration Tests (80 tests)
+       /        \       Integration Tests (~60 tests)
       /          \      Real PostgreSQL, Redis
      /------------\
-    /              \    Unit Tests (147 tests)
+    /              \    Unit Tests (~500 tests)
    /                \   Domain entities, services, DTOs, use cases
   /------------------\
 ```
 
 | Layer | Test Count | Coverage | External Deps | Speed |
 |-------|-----------|----------|---------------|-------|
-| **Unit** | 147 | >95% | None | ~0.5s |
+| **Unit** | ~500 | >95% | None | ~2s |
 | **Integration** | 80 | >90% | PostgreSQL, Redis | ~30s |
 | **E2E** | 20 | ~40% | Full stack | ~60s |
 

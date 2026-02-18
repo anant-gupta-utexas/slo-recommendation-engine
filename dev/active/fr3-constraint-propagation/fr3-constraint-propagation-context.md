@@ -1,8 +1,8 @@
 # FR-3: Dependency-Aware Constraint Propagation — Context Document
 
 **Created:** 2026-02-15
-**Status:** Phase 3 Complete (All Tasks Done, E2E Tests Need Fixes)
-**Last Updated:** 2026-02-16 17:32
+**Status:** Nearly Complete (All Code Written, 5 E2E Tests Need Fixes)
+**Last Updated:** 2026-02-17
 
 ---
 
@@ -361,58 +361,46 @@ alembic revision --autogenerate -m "add_service_type_to_services"
 ## Handoff Notes for Next Developer
 
 ### Current State
-- **Completed:** Phase 0 & 1 fully done, Phase 2 code complete
-- **Blocked:** Phase 2 tests need Task 3.2
-- **Next:** Phase 3, Tasks 3.1 & 3.2 first
+- **All code complete:** 16/16 tasks implemented across all 4 phases
+- **Tests:** 256/261 passing (98%); 5 E2E tests need debugging
+- **No blockers** for remaining work
 
-### What Just Happened
-1. Implemented all Phase 2 DTOs (7 classes, 19 tests passing)
-2. Implemented RunConstraintAnalysisUseCase (11-step pipeline, ~320 lines)
-3. Implemented GetErrorBudgetBreakdownUseCase (depth=1 analysis, ~200 lines)
-4. Discovered Task 3.2 dependency, added defensive `getattr()` calls
-5. Updated task tracker with accurate status
+### Remaining Work
 
-### Immediate Actions
+**Debug 5 failing E2E tests:**
+1. `test_successful_constraint_analysis` — 500 error (use case execution failing)
+2. `test_constraint_analysis_with_external_service` — 400 at ingestion (metadata handling)
+3. `test_constraint_analysis_unachievable_slo` — 500 error (same root as #1)
+4. `test_constraint_analysis_no_dependencies` — expects 422, gets 400 (both acceptable)
+5. `test_successful_error_budget_breakdown` — schema mismatch (flat vs nested)
+
+See [SESSION_4_SUMMARY.md](./SESSION_4_SUMMARY.md) for detailed root cause analysis.
+
+### Verification Commands
 ```bash
-# 1. Start with Task 3.1 (migration)
-alembic revision --autogenerate -m "add_service_type_to_services"
+source .venv/bin/activate
 
-# 2. Then Task 3.2 (Service entity)
-# Edit: src/domain/entities/service.py
-# Add: service_type, published_sla fields
+# All unit + domain tests
+pytest tests/unit/domain/ tests/unit/application/ -v
 
-# 3. Run tests to verify unblock
-pytest tests/unit/application/use_cases/ -v
-```
+# FR-3 schema tests
+pytest tests/unit/infrastructure/api/schemas/test_constraint_analysis_schema.py -v
 
-### Key Files Modified This Session
-- `src/application/dtos/constraint_analysis_dto.py` (new)
-- `src/application/use_cases/run_constraint_analysis.py` (new)
-- `src/application/use_cases/get_error_budget_breakdown.py` (new)
-- `tests/unit/application/dtos/test_constraint_analysis_dto.py` (new)
-- `tests/unit/application/use_cases/test_run_constraint_analysis.py` (new, blocked)
-- `tests/unit/application/use_cases/test_get_error_budget_breakdown.py` (new, blocked)
-- `dev/active/fr3-constraint-propagation/fr3-constraint-propagation-tasks.md` (updated)
+# E2E tests (requires docker-compose up)
+pytest tests/e2e/test_constraint_analysis.py -v
 
-### Test Commands
-```bash
-# Current passing tests
-pytest tests/unit/domain/ tests/unit/application/dtos/ -v
-# 182 tests should pass
-
-# After Task 3.2
-pytest tests/unit/ -v
-# All 199 tests should pass
+# Linting
+ruff check . && ruff format --check . && mypy src/ --strict
 ```
 
 ### Architecture Notes
 - Use cases follow Clean Architecture: repos → domain services → DTOs
-- Parallel queries via `asyncio.gather()` for performance
+- Parallel telemetry queries via `asyncio.gather()` for performance
 - Defensive `getattr()` allows code to work before/after migration
 - External/internal service distinction via `ServiceType` enum
+- No caching — on-demand computation well within 2s target
 
 ---
 
-**Last Updated:** 2026-02-16 17:32 by Claude Sonnet 4.5
-**Status:** Phase 3 Nearly Complete (16/16 tasks, all code written)
-**Next Session:** Debug 5 failing E2E tests, verify linting/formatting
+**Last Updated:** 2026-02-17 (Documentation refresh)
+**Status:** All code written; 5/13 E2E tests need debugging, then ready for archival
