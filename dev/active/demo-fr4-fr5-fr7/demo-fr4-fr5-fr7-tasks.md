@@ -29,5 +29,5 @@
 
 ## Phase 4: Demo Script + Seed Data
 - [x] Add api-gateway, checkout-service, user-service, inventory-service to seed data
-- [x] Create `scripts/demo.sh` end-to-end demo script
-- [ ] Manual smoke test via docker-compose up + demo.sh
+- [x] Create demo scripts (streamlit_demo.py, setup_demo.sh, DEMO_README.md)
+- [ ] Manual smoke test via docker-compose up + demo scripts

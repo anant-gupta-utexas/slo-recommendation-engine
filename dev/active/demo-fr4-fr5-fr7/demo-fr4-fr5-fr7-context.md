@@ -47,7 +47,9 @@
 - `src/infrastructure/telemetry/seed_data.py` — Added 4 new services
 
 ### Demo
-- `scripts/demo.sh` — End-to-end demo script
+- `demo/streamlit_demo.py` — Interactive Streamlit demo application
+- `demo/setup_demo.sh` — Setup script for demo environment
+- `demo/DEMO_README.md` — Demo documentation and instructions
 
 ## Dependencies
 - FR-5 must be built first (FR-4 reads from in-memory SLO store)
