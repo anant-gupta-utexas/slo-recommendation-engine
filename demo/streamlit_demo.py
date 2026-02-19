@@ -30,29 +30,91 @@ STEPS = [
     "7. Audit History (FR-5)",
 ]
 
-DEMO_NODES = [
-    {"service_id": "api-gateway", "metadata": {"team": "platform", "criticality": "high"}},
-    {"service_id": "checkout-service", "metadata": {"team": "commerce", "criticality": "high"}},
-    {"service_id": "user-service", "metadata": {"team": "identity", "criticality": "high"}},
-    {"service_id": "payment-service", "metadata": {"team": "payments", "criticality": "high"}},
-    {"service_id": "inventory-service", "metadata": {"team": "commerce", "criticality": "medium"}},
-    {"service_id": "auth-service", "metadata": {"team": "identity", "criticality": "high"}},
-    {"service_id": "notification-service", "metadata": {"team": "platform", "criticality": "low"}},
-    {"service_id": "analytics-service", "metadata": {"team": "data", "criticality": "low"}},
-]
+DEMO_DATA_BY_SOURCE = {
+    "manual": {
+        "nodes": [
+            {"service_id": "api-gateway", "metadata": {"team": "platform", "criticality": "high"}},
+            {"service_id": "checkout-service", "metadata": {"team": "commerce", "criticality": "high"}},
+            {"service_id": "user-service", "metadata": {"team": "identity", "criticality": "high"}},
+            {"service_id": "payment-service", "metadata": {"team": "payments", "criticality": "high"}},
+            {"service_id": "inventory-service", "metadata": {"team": "commerce", "criticality": "medium"}},
+            {"service_id": "auth-service", "metadata": {"team": "identity", "criticality": "high"}},
+            {"service_id": "notification-service", "metadata": {"team": "platform", "criticality": "low"}},
+            {"service_id": "analytics-service", "metadata": {"team": "data", "criticality": "low"}},
+        ],
+        "edges": [
+            {"source": "api-gateway", "target": "checkout-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "api-gateway", "target": "user-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "checkout-service", "target": "payment-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "checkout-service", "target": "inventory-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "checkout-service", "target": "user-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "payment-service", "target": "auth-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "checkout-service", "target": "notification-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
+            {"source": "api-gateway", "target": "analytics-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
+            {"source": "inventory-service", "target": "notification-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
+            {"source": "user-service", "target": "auth-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+        ],
+    },
+    "otel_service_graph": {
+        "nodes": [
+            {"service_id": "frontend", "metadata": {"team": "platform", "criticality": "high", "instrumentation": "auto", "traces_per_min": 15000}},
+            {"service_id": "api-server", "metadata": {"team": "platform", "criticality": "high", "instrumentation": "manual", "traces_per_min": 12000}},
+            {"service_id": "order-processor", "metadata": {"team": "commerce", "criticality": "high", "instrumentation": "auto", "traces_per_min": 8000}},
+            {"service_id": "payment-gateway", "metadata": {"team": "payments", "criticality": "high", "instrumentation": "manual", "traces_per_min": 5000}},
+            {"service_id": "inventory-db", "metadata": {"team": "commerce", "criticality": "medium", "instrumentation": "auto", "traces_per_min": 3000}},
+            {"service_id": "user-profile", "metadata": {"team": "identity", "criticality": "high", "instrumentation": "manual", "traces_per_min": 6000}},
+            {"service_id": "email-worker", "metadata": {"team": "platform", "criticality": "low", "instrumentation": "auto", "traces_per_min": 500}},
+        ],
+        "edges": [
+            {"source": "frontend", "target": "api-server", "attributes": {"communication_mode": "sync", "criticality": "hard", "avg_latency_ms": 45}},
+            {"source": "api-server", "target": "order-processor", "attributes": {"communication_mode": "sync", "criticality": "hard", "avg_latency_ms": 120}},
+            {"source": "api-server", "target": "user-profile", "attributes": {"communication_mode": "sync", "criticality": "hard", "avg_latency_ms": 30}},
+            {"source": "order-processor", "target": "payment-gateway", "attributes": {"communication_mode": "sync", "criticality": "hard", "avg_latency_ms": 200}},
+            {"source": "order-processor", "target": "inventory-db", "attributes": {"communication_mode": "sync", "criticality": "hard", "avg_latency_ms": 15}},
+            {"source": "order-processor", "target": "email-worker", "attributes": {"communication_mode": "async", "criticality": "soft", "avg_latency_ms": 5}},
+        ],
+    },
+    "kubernetes": {
+        "nodes": [
+            {"service_id": "ingress-nginx", "metadata": {"team": "platform", "criticality": "high", "namespace": "ingress", "replicas": 3, "cpu_request": "500m"}},
+            {"service_id": "web-app", "metadata": {"team": "frontend", "criticality": "high", "namespace": "production", "replicas": 5, "cpu_request": "1000m"}},
+            {"service_id": "order-service", "metadata": {"team": "commerce", "criticality": "high", "namespace": "production", "replicas": 4, "cpu_request": "2000m"}},
+            {"service_id": "payment-processor", "metadata": {"team": "payments", "criticality": "high", "namespace": "production", "replicas": 3, "cpu_request": "1500m"}},
+            {"service_id": "product-catalog", "metadata": {"team": "commerce", "criticality": "medium", "namespace": "production", "replicas": 2, "cpu_request": "1000m"}},
+            {"service_id": "postgres-primary", "metadata": {"team": "platform", "criticality": "high", "namespace": "database", "replicas": 1, "cpu_request": "4000m"}},
+            {"service_id": "redis-cache", "metadata": {"team": "platform", "criticality": "medium", "namespace": "cache", "replicas": 3, "cpu_request": "500m"}},
+        ],
+        "edges": [
+            {"source": "ingress-nginx", "target": "web-app", "attributes": {"communication_mode": "sync", "criticality": "hard", "protocol": "http"}},
+            {"source": "web-app", "target": "order-service", "attributes": {"communication_mode": "sync", "criticality": "hard", "protocol": "grpc"}},
+            {"source": "web-app", "target": "product-catalog", "attributes": {"communication_mode": "sync", "criticality": "hard", "protocol": "http"}},
+            {"source": "order-service", "target": "payment-processor", "attributes": {"communication_mode": "sync", "criticality": "hard", "protocol": "grpc"}},
+            {"source": "order-service", "target": "postgres-primary", "attributes": {"communication_mode": "sync", "criticality": "hard", "protocol": "tcp"}},
+            {"source": "web-app", "target": "redis-cache", "attributes": {"communication_mode": "sync", "criticality": "soft", "protocol": "tcp"}},
+        ],
+    },
+    "service_mesh": {
+        "nodes": [
+            {"service_id": "gateway-proxy", "metadata": {"team": "platform", "criticality": "high", "mesh": "istio", "mtls_mode": "strict", "circuit_breaker": True}},
+            {"service_id": "webapp-v1", "metadata": {"team": "frontend", "criticality": "high", "mesh": "istio", "mtls_mode": "strict", "circuit_breaker": False}},
+            {"service_id": "orders-v2", "metadata": {"team": "commerce", "criticality": "high", "mesh": "istio", "mtls_mode": "strict", "circuit_breaker": True}},
+            {"service_id": "payments-v1", "metadata": {"team": "payments", "criticality": "high", "mesh": "istio", "mtls_mode": "strict", "circuit_breaker": True}},
+            {"service_id": "inventory-v1", "metadata": {"team": "commerce", "criticality": "medium", "mesh": "istio", "mtls_mode": "permissive", "circuit_breaker": False}},
+            {"service_id": "notifications-v1", "metadata": {"team": "platform", "criticality": "low", "mesh": "istio", "mtls_mode": "permissive", "circuit_breaker": False}},
+        ],
+        "edges": [
+            {"source": "gateway-proxy", "target": "webapp-v1", "attributes": {"communication_mode": "sync", "criticality": "hard", "retry_policy": "3x", "timeout_ms": 5000}},
+            {"source": "webapp-v1", "target": "orders-v2", "attributes": {"communication_mode": "sync", "criticality": "hard", "retry_policy": "2x", "timeout_ms": 3000}},
+            {"source": "orders-v2", "target": "payments-v1", "attributes": {"communication_mode": "sync", "criticality": "hard", "retry_policy": "1x", "timeout_ms": 10000}},
+            {"source": "orders-v2", "target": "inventory-v1", "attributes": {"communication_mode": "sync", "criticality": "hard", "retry_policy": "3x", "timeout_ms": 2000}},
+            {"source": "orders-v2", "target": "notifications-v1", "attributes": {"communication_mode": "async", "criticality": "soft", "retry_policy": "5x", "timeout_ms": 1000}},
+        ],
+    },
+}
 
-DEMO_EDGES = [
-    {"source": "api-gateway", "target": "checkout-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-    {"source": "api-gateway", "target": "user-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-    {"source": "checkout-service", "target": "payment-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-    {"source": "checkout-service", "target": "inventory-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-    {"source": "checkout-service", "target": "user-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-    {"source": "payment-service", "target": "auth-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-    {"source": "checkout-service", "target": "notification-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
-    {"source": "api-gateway", "target": "analytics-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
-    {"source": "inventory-service", "target": "notification-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
-    {"source": "user-service", "target": "auth-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
-]
+# Backward compatibility - default to manual
+DEMO_NODES = DEMO_DATA_BY_SOURCE["manual"]["nodes"]
+DEMO_EDGES = DEMO_DATA_BY_SOURCE["manual"]["edges"]
 
 # ---------------------------------------------------------------------------
 # API Client
@@ -296,71 +358,100 @@ def render_step_1():
     st.header("Step 1: Ingest Dependency Graph (FR-1)")
     st.caption("POST /api/v1/services/dependencies")
 
-    if "step1_nodes_df" not in st.session_state:
-        st.session_state.step1_nodes_df = pd.DataFrame([
-            {"service_id": n["service_id"], "team": n["metadata"]["team"], "criticality": n["metadata"]["criticality"]}
-            for n in DEMO_NODES
-        ])
-    if "step1_edges_df" not in st.session_state:
-        st.session_state.step1_edges_df = pd.DataFrame([
-            {"source": e["source"], "target": e["target"],
-             "communication_mode": e["attributes"]["communication_mode"],
-             "criticality": e["attributes"]["criticality"]}
-            for e in DEMO_EDGES
-        ])
+    # Initialize demo_data_loaded flag if not present
+    if "demo_data_loaded" not in st.session_state:
+        st.session_state.demo_data_loaded = False
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Load Demo Data", type="secondary"):
+    # Controls row - keep dropdown and button aligned
+    source = st.selectbox("Discovery source", ["otel_service_graph", "manual", "kubernetes", "service_mesh"])
+
+    if st.button("Load Demo Data", type="secondary"):
+        # Load data based on selected source
+        demo_data = DEMO_DATA_BY_SOURCE.get(source, DEMO_DATA_BY_SOURCE["manual"])
+
+        # Extract all metadata fields dynamically from the first node
+        if demo_data["nodes"]:
+            first_node_metadata = demo_data["nodes"][0]["metadata"]
+            node_columns = ["service_id"] + list(first_node_metadata.keys())
+
             st.session_state.step1_nodes_df = pd.DataFrame([
-                {"service_id": n["service_id"], "team": n["metadata"]["team"], "criticality": n["metadata"]["criticality"]}
-                for n in DEMO_NODES
+                {"service_id": n["service_id"], **n["metadata"]}
+                for n in demo_data["nodes"]
             ])
+        else:
+            st.session_state.step1_nodes_df = pd.DataFrame()
+
+        # Extract all edge attributes dynamically
+        if demo_data["edges"]:
+            first_edge_attrs = demo_data["edges"][0]["attributes"]
+            edge_columns = ["source", "target"] + list(first_edge_attrs.keys())
+
             st.session_state.step1_edges_df = pd.DataFrame([
-                {"source": e["source"], "target": e["target"],
-                 "communication_mode": e["attributes"]["communication_mode"],
-                 "criticality": e["attributes"]["criticality"]}
-                for e in DEMO_EDGES
+                {"source": e["source"], "target": e["target"], **e["attributes"]}
+                for e in demo_data["edges"]
             ])
-            st.rerun()
-    with col2:
-        source = st.selectbox("Discovery source", ["otel_service_graph", "manual", "kubernetes", "service_mesh"])
+        else:
+            st.session_state.step1_edges_df = pd.DataFrame()
 
-    st.subheader("Nodes")
-    nodes_df = st.data_editor(
-        st.session_state.step1_nodes_df,
-        num_rows="dynamic",
-        column_config={
-            "criticality": st.column_config.SelectboxColumn(options=["high", "medium", "low"]),
-        },
-        key="nodes_editor",
-    )
+        st.session_state.demo_data_loaded = True
+        st.rerun()
 
-    st.subheader("Edges")
-    edges_df = st.data_editor(
-        st.session_state.step1_edges_df,
-        num_rows="dynamic",
-        column_config={
-            "communication_mode": st.column_config.SelectboxColumn(options=["sync", "async"]),
-            "criticality": st.column_config.SelectboxColumn(options=["hard", "soft", "degraded"]),
-        },
-        key="edges_editor",
-    )
+    st.divider()
 
-    if st.button("Ingest Graph", type="primary"):
+    # Only show tables if demo data has been loaded
+    if not st.session_state.demo_data_loaded:
+        st.info("📝 Select a discovery source above and click 'Load Demo Data' to populate the tables with example services and dependencies")
+        nodes_df = None
+        edges_df = None
+    else:
+        st.subheader("Nodes")
+        nodes_df = st.data_editor(
+            st.session_state.step1_nodes_df,
+            num_rows="dynamic",
+            column_config={
+                "criticality": st.column_config.SelectboxColumn(options=["high", "medium", "low"]),
+            },
+            key="nodes_editor",
+        )
+
+        st.subheader("Edges")
+        edges_df = st.data_editor(
+            st.session_state.step1_edges_df,
+            num_rows="dynamic",
+            column_config={
+                "communication_mode": st.column_config.SelectboxColumn(options=["sync", "async"]),
+                "criticality": st.column_config.SelectboxColumn(options=["hard", "soft", "degraded"]),
+            },
+            key="edges_editor",
+        )
+
+        st.divider()
+
+    if st.button("Ingest Graph", type="primary", disabled=not st.session_state.demo_data_loaded):
+        # Build nodes with all metadata fields (excluding service_id)
+        nodes_payload = []
+        for _, row in nodes_df.iterrows():
+            metadata = {k: v for k, v in row.items() if k != "service_id"}
+            nodes_payload.append({
+                "service_id": row["service_id"],
+                "metadata": metadata
+            })
+
+        # Build edges with all attribute fields (excluding source and target)
+        edges_payload = []
+        for _, row in edges_df.iterrows():
+            attributes = {k: v for k, v in row.items() if k not in ["source", "target"]}
+            edges_payload.append({
+                "source": row["source"],
+                "target": row["target"],
+                "attributes": attributes
+            })
+
         payload = {
             "source": source,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "nodes": [
-                {"service_id": row["service_id"], "metadata": {"team": row.get("team", ""), "criticality": row.get("criticality", "medium")}}
-                for _, row in nodes_df.iterrows()
-            ],
-            "edges": [
-                {"source": row["source"], "target": row["target"],
-                 "attributes": {"communication_mode": row.get("communication_mode", "sync"),
-                                "criticality": row.get("criticality", "hard")}}
-                for _, row in edges_df.iterrows()
-            ],
+            "nodes": nodes_payload,
+            "edges": edges_payload,
         }
         client = get_client()
         with st.spinner("Ingesting dependency graph..."):
