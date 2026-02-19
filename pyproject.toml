@@ -60,6 +60,13 @@ dev = [
     # Type Stubs
     "types-redis>=4.6.0",
 ]
+demo = [
+    "streamlit>=1.30.0",
+    "requests>=2.31.0",
+    "networkx>=3.2",
+    "matplotlib>=3.8.0",
+    "pandas>=2.1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
