@@ -53,6 +53,10 @@ DEMO_DATA_BY_SOURCE = {
             {"source": "api-gateway", "target": "analytics-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
             {"source": "inventory-service", "target": "notification-service", "attributes": {"communication_mode": "async", "criticality": "soft"}},
             {"source": "user-service", "target": "auth-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            # Circular dependency: auth-service -> user-service -> auth-service
+            {"source": "auth-service", "target": "user-service", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            # Another cycle: payment-service -> checkout-service (completes a cycle)
+            {"source": "payment-service", "target": "checkout-service", "attributes": {"communication_mode": "sync", "criticality": "degraded"}},
         ],
     },
     "otel_service_graph": {
@@ -110,6 +114,35 @@ DEMO_DATA_BY_SOURCE = {
             {"source": "orders-v2", "target": "notifications-v1", "attributes": {"communication_mode": "async", "criticality": "soft", "retry_policy": "5x", "timeout_ms": 1000}},
         ],
     },
+    "demo_with_issues": {
+        "nodes": [
+            # Intentionally define only 3 services, but reference 6 in edges to trigger warnings
+            {"service_id": "api-gateway", "metadata": {"team": "platform", "criticality": "high"}},
+            {"service_id": "service-a", "metadata": {"team": "team-a", "criticality": "high"}},
+            {"service_id": "service-b", "metadata": {"team": "team-b", "criticality": "medium"}},
+        ],
+        "edges": [
+            # Normal edges
+            {"source": "api-gateway", "target": "service-a", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "api-gateway", "target": "service-b", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+
+            # Edges to undefined services (will trigger warnings about auto-created services)
+            {"source": "service-a", "target": "service-c", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "service-b", "target": "service-d", "attributes": {"communication_mode": "async", "criticality": "soft"}},
+            {"source": "service-c", "target": "service-e", "attributes": {"communication_mode": "sync", "criticality": "degraded"}},
+
+            # Create circular dependencies
+            # Cycle 1: service-a -> service-c -> service-a
+            {"source": "service-c", "target": "service-a", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+
+            # Cycle 2: service-b -> service-d -> service-e -> service-b
+            {"source": "service-d", "target": "service-e", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+            {"source": "service-e", "target": "service-b", "attributes": {"communication_mode": "sync", "criticality": "hard"}},
+
+            # Cycle 3: api-gateway -> service-a -> service-c -> api-gateway (larger cycle)
+            {"source": "service-c", "target": "api-gateway", "attributes": {"communication_mode": "sync", "criticality": "degraded"}},
+        ],
+    },
 }
 
 # Backward compatibility - default to manual
@@ -128,10 +161,11 @@ class SloEngineClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.session = requests.Session()
-        self.session.headers.update({
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        })
+        headers = {"Content-Type": "application/json"}
+        # Only add Authorization header if API key is provided
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        self.session.headers.update(headers)
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
@@ -160,7 +194,8 @@ class SloEngineClient:
         return self._request("GET", "/api/v1/health")
 
     def ingest_dependencies(self, payload: dict) -> dict | None:
-        return self._request("POST", "/api/v1/services/dependencies", json=payload)
+        # Use demo endpoint that includes circular dependency detection
+        return self._request("POST", "/api/v1/demo/dependencies", json=payload)
 
     def query_subgraph(self, service_id: str, direction: str, depth: int) -> dict | None:
         return self._request(
@@ -187,6 +222,10 @@ class SloEngineClient:
 
     def slo_history(self, service_id: str) -> dict | None:
         return self._request("GET", f"/api/v1/services/{service_id}/slo-history")
+
+    def clear_all_data(self) -> dict | None:
+        """Clear all graph data (demo helper - bypasses normal flow)."""
+        return self._request("DELETE", "/api/v1/demo/clear-all")
 
 
 def get_client() -> SloEngineClient:
@@ -356,45 +395,63 @@ def draw_dependency_graph(nodes: list[dict], edges: list[dict]):
 
 def render_step_1():
     st.header("Step 1: Ingest Dependency Graph (FR-1)")
-    st.caption("POST /api/v1/services/dependencies")
+    st.caption("POST /api/v1/demo/dependencies (demo endpoint with immediate circular detection)")
 
     # Initialize demo_data_loaded flag if not present
     if "demo_data_loaded" not in st.session_state:
         st.session_state.demo_data_loaded = False
 
-    # Controls row - keep dropdown and button aligned
-    source = st.selectbox("Discovery source", ["otel_service_graph", "manual", "kubernetes", "service_mesh"])
+    # Controls row
+    source = st.selectbox("Discovery source", ["otel_service_graph", "manual", "kubernetes", "service_mesh", "demo_with_issues"])
 
-    if st.button("Load Demo Data", type="secondary"):
-        # Load data based on selected source
-        demo_data = DEMO_DATA_BY_SOURCE.get(source, DEMO_DATA_BY_SOURCE["manual"])
+    col_load, col_clear = st.columns([1, 1])
+    with col_load:
+        if st.button("Load Demo Data", type="secondary"):
+            # Load data based on selected source
+            demo_data = DEMO_DATA_BY_SOURCE.get(source, DEMO_DATA_BY_SOURCE["manual"])
 
-        # Extract all metadata fields dynamically from the first node
-        if demo_data["nodes"]:
-            first_node_metadata = demo_data["nodes"][0]["metadata"]
-            node_columns = ["service_id"] + list(first_node_metadata.keys())
+            # Extract all metadata fields dynamically from the first node
+            if demo_data["nodes"]:
+                first_node_metadata = demo_data["nodes"][0]["metadata"]
+                node_columns = ["service_id"] + list(first_node_metadata.keys())
 
-            st.session_state.step1_nodes_df = pd.DataFrame([
-                {"service_id": n["service_id"], **n["metadata"]}
-                for n in demo_data["nodes"]
-            ])
-        else:
-            st.session_state.step1_nodes_df = pd.DataFrame()
+                st.session_state.step1_nodes_df = pd.DataFrame([
+                    {"service_id": n["service_id"], **n["metadata"]}
+                    for n in demo_data["nodes"]
+                ])
+            else:
+                st.session_state.step1_nodes_df = pd.DataFrame()
 
-        # Extract all edge attributes dynamically
-        if demo_data["edges"]:
-            first_edge_attrs = demo_data["edges"][0]["attributes"]
-            edge_columns = ["source", "target"] + list(first_edge_attrs.keys())
+            # Extract all edge attributes dynamically
+            if demo_data["edges"]:
+                first_edge_attrs = demo_data["edges"][0]["attributes"]
+                edge_columns = ["source", "target"] + list(first_edge_attrs.keys())
 
-            st.session_state.step1_edges_df = pd.DataFrame([
-                {"source": e["source"], "target": e["target"], **e["attributes"]}
-                for e in demo_data["edges"]
-            ])
-        else:
-            st.session_state.step1_edges_df = pd.DataFrame()
+                st.session_state.step1_edges_df = pd.DataFrame([
+                    {"source": e["source"], "target": e["target"], **e["attributes"]}
+                    for e in demo_data["edges"]
+                ])
+            else:
+                st.session_state.step1_edges_df = pd.DataFrame()
 
-        st.session_state.demo_data_loaded = True
-        st.rerun()
+            st.session_state.demo_data_loaded = True
+            st.rerun()
+
+    with col_clear:
+        if st.button("🗑️ Clear All Data", type="secondary", help="Clear all services, edges, and alerts from database"):
+            client = get_client()
+            with st.spinner("Clearing all data..."):
+                resp = client.clear_all_data()
+            if resp:
+                st.success("All data cleared!")
+                # Reset session state
+                st.session_state.demo_data_loaded = False
+                st.session_state.step_1_completed = False
+                if "ingested_services" in st.session_state:
+                    del st.session_state["ingested_services"]
+                st.rerun()
+            else:
+                st.warning("Clear endpoint not available (requires backend implementation)")
 
     st.divider()
 
@@ -447,8 +504,11 @@ def render_step_1():
                 "attributes": attributes
             })
 
+        # Map demo_with_issues to manual source for backend compatibility
+        backend_source = "manual" if source == "demo_with_issues" else source
+
         payload = {
-            "source": source,
+            "source": backend_source,
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "nodes": nodes_payload,
             "edges": edges_payload,
@@ -465,16 +525,33 @@ def render_step_1():
             st.session_state.ingested_services = services
 
             st.success("Graph ingested successfully!")
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             c1.metric("Nodes Upserted", resp.get("nodes_upserted", 0))
             c2.metric("Edges Upserted", resp.get("edges_upserted", 0))
             circ = resp.get("circular_dependencies_detected", [])
             c3.metric("Circular Deps", len(circ))
+            conflicts = resp.get("conflicts_resolved", [])
+            c4.metric("Conflicts Resolved", len(conflicts))
 
+            # Display warnings
             for w in resp.get("warnings", []):
                 st.warning(w)
+
+            # Display circular dependencies
             for cd in circ:
-                st.warning(f"Circular dependency: {' -> '.join(cd.get('cycle_path', []))}")
+                st.warning(f"⚠️ Circular dependency: {' -> '.join(cd.get('cycle_path', []))}")
+
+            # Display conflicts
+            if conflicts:
+                with st.expander(f"🔀 {len(conflicts)} Edge Conflict(s) Resolved", expanded=len(conflicts) > 0):
+                    for conflict in conflicts:
+                        edge_str = f"{conflict.get('edge', 'unknown')}"
+                        st.info(
+                            f"**Edge:** {edge_str}\n\n"
+                            f"**Existing source:** {conflict.get('existing_source', 'N/A')}\n\n"
+                            f"**New source:** {conflict.get('new_source', 'N/A')}\n\n"
+                            f"**Resolution:** {conflict.get('resolution', 'N/A')}"
+                        )
 
             json_expander("Raw JSON Response", resp)
 
@@ -961,9 +1038,9 @@ def render_sidebar():
 
         st.subheader("Configuration")
         base_url = st.text_input("API Base URL", value=st.session_state.get("base_url", "http://localhost:8000"))
-        api_key = st.text_input("API Key", value=st.session_state.get("api_key", "demo-api-key-for-testing"), type="password")
         st.session_state.base_url = base_url
-        st.session_state.api_key = api_key
+        # No API key needed for demo endpoints
+        st.session_state.api_key = ""
 
         # Connection status
         if st.button("Check Connection", type="secondary"):

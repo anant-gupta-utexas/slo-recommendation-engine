@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
     # Register routes
     from .routes import (
         constraint_analysis,
+        demo,
         dependencies,
         health,
         impact_analysis,
@@ -131,9 +132,13 @@ def create_app() -> FastAPI:
         prefix="/api/v1/slos",
         tags=["Impact Analysis"],
     )
+    # Demo routes (disabled in production via environment variable check)
+    from src.infrastructure.config.settings import Settings
+    settings = Settings()
+    if settings.environment != "production":
+        app.include_router(demo.router, prefix="/api/v1")
 
     # Register exception handlers for proper RFC 7807 format
-    from fastapi.exceptions import HTTPException, RequestValidationError
     from .schemas.error_schema import ProblemDetails
 
     @app.exception_handler(HTTPException)

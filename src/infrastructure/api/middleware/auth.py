@@ -21,7 +21,13 @@ EXCLUDED_PATHS = {
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/",  # Root endpoint
 }
+
+# Path prefixes that don't require authentication
+EXCLUDED_PATH_PREFIXES = [
+    "/api/v1/demo/",  # All demo endpoints are public
+]
 
 
 async def verify_api_key(request: Request) -> str:
@@ -39,6 +45,11 @@ async def verify_api_key(request: Request) -> str:
     # Skip authentication for excluded paths
     if request.url.path in EXCLUDED_PATHS:
         return "health-check"
+
+    # Skip authentication for excluded path prefixes (e.g., demo endpoints)
+    for prefix in EXCLUDED_PATH_PREFIXES:
+        if request.url.path.startswith(prefix):
+            return "demo-user"
 
     # Extract Authorization header
     auth_header = request.headers.get("Authorization")
