@@ -261,60 +261,6 @@ def check_prereqs(required_steps: list[int], messages: dict[int, str]) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _draw_feature_flow():
-    """Render the feature flow diagram using matplotlib."""
-    fig, ax = plt.subplots(figsize=(10, 3))
-
-    boxes = {
-        "FR-1\nDependency\nGraph":     (0.08, 0.5),
-        "FR-2\nRecommend-\nations":     (0.30, 0.7),
-        "FR-7\nExplain-\nability":      (0.30, 0.25),
-        "FR-5\nAccept /\nModify":       (0.52, 0.7),
-        "FR-4\nImpact\nAnalysis":       (0.52, 0.25),
-        "Audit\nHistory":               (0.74, 0.5),
-    }
-    colors = {
-        "FR-1\nDependency\nGraph":  "#3498db",
-        "FR-2\nRecommend-\nations":  "#2ecc71",
-        "FR-7\nExplain-\nability":   "#9b59b6",
-        "FR-5\nAccept /\nModify":    "#e67e22",
-        "FR-4\nImpact\nAnalysis":    "#e74c3c",
-        "Audit\nHistory":            "#1abc9c",
-    }
-
-    for label, (x, y) in boxes.items():
-        color = colors[label]
-        bbox = dict(boxstyle="round,pad=0.4", facecolor=color, edgecolor="white", alpha=0.9)
-        ax.text(x, y, label, ha="center", va="center", fontsize=8, fontweight="bold",
-                color="white", bbox=bbox, transform=ax.transAxes)
-
-    arrows = [
-        ("FR-1\nDependency\nGraph", "FR-2\nRecommend-\nations"),
-        ("FR-1\nDependency\nGraph", "FR-4\nImpact\nAnalysis"),
-        ("FR-2\nRecommend-\nations", "FR-5\nAccept /\nModify"),
-        ("FR-2\nRecommend-\nations", "FR-7\nExplain-\nability"),
-        ("FR-5\nAccept /\nModify", "FR-4\nImpact\nAnalysis"),
-        ("FR-5\nAccept /\nModify", "Audit\nHistory"),
-    ]
-
-    for src, tgt in arrows:
-        sx, sy = boxes[src]
-        tx, ty = boxes[tgt]
-        ax.annotate("", xy=(tx, ty), xytext=(sx, sy),
-                     xycoords="axes fraction", textcoords="axes fraction",
-                     arrowprops=dict(arrowstyle="->", color="#ecf0f1", lw=1.5,
-                                     connectionstyle="arc3,rad=0.1"))
-
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
-    fig.patch.set_facecolor("#0e1117")
-    ax.set_facecolor("#0e1117")
-    fig.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
-
-
 def draw_dependency_graph(nodes: list[dict], edges: list[dict]):
     """Render a NetworkX directed graph with matplotlib."""
     G = nx.DiGraph()
@@ -1092,12 +1038,7 @@ def main():
 
     step = render_sidebar()
 
-    # Header with feature flow
     st.title("SLO Recommendation Engine")
-    st.caption("Interactive demo walking through FR-1 through FR-7")
-
-    with st.expander("Feature Flow Diagram", expanded=False):
-        _draw_feature_flow()
 
     st.divider()
 
