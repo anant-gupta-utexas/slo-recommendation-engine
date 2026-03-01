@@ -6,7 +6,7 @@ An AI-assisted backend system that analyzes telemetry data and structural depend
 
 In cloud-native organizations at scale (500-5,000+ microservices), SLO setting is manual, error-prone, and fails to account for the interconnected nature of distributed systems. This engine models service dependencies as a directed graph and uses that topology — combined with telemetry from Prometheus, OpenTelemetry, and Grafana Tempo — to recommend dependency-aware SLOs.
 
-**Current Status:** FR-1 (Service Dependency Graph) is production-ready. See [Feature Roadmap](#feature-roadmap) for upcoming work.
+See [Feature Roadmap](#feature-roadmap) for upcoming work.
 
 ## Features
 
@@ -40,7 +40,21 @@ Built with **Clean Architecture** (Domain → Application → Infrastructure) on
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
 - Docker and Docker Compose
 
-### Installation
+### One-Command Setup
+
+```bash
+# Automated setup (starts services, runs migrations, seeds demo API key)
+./demo/setup_demo.sh
+```
+
+This script handles:
+1. Starts Docker services (API, PostgreSQL, Redis, Prometheus)
+2. Waits for PostgreSQL to be ready
+3. Runs database migrations
+4. Seeds a demo API key (`demo-api-key-for-testing`)
+5. Installs Python dependencies
+
+### Manual Installation
 
 ```bash
 # Clone the repository
@@ -58,6 +72,17 @@ cp .env.example .env
 
 # Start the full stack (API + PostgreSQL + Redis + Prometheus)
 docker-compose up --build
+
+# Run database migrations
+DATABASE_URL="postgresql+asyncpg://slo_user:slo_password_dev@localhost:5432/slo_engine" \
+  alembic upgrade head
+
+# Create a demo API key
+API_KEY_HASH=$(.venv/bin/python -c "import bcrypt; print(bcrypt.hashpw(b'demo-api-key-for-testing', bcrypt.gensalt(12)).decode())")
+docker compose exec db psql -U slo_user -d slo_engine -c "
+  INSERT INTO api_keys (id, name, key_hash, created_by, is_active)
+  VALUES (gen_random_uuid(), 'demo', '${API_KEY_HASH}', 'demo-setup', true)
+  ON CONFLICT (name) DO UPDATE SET key_hash = EXCLUDED.key_hash;"
 ```
 
 ### Verify It's Working
@@ -76,11 +101,9 @@ open http://localhost:8000/docs    # Swagger UI
 ### Ingest a Dependency Graph
 
 ```bash
-# First, create an API key (see docs/3_guides/getting_started.md for details)
-
-# Ingest services and dependencies
+# Ingest services and dependencies (using demo API key)
 curl -X POST http://localhost:8000/api/v1/services/dependencies \
-  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Authorization: Bearer demo-api-key-for-testing" \
   -H "Content-Type: application/json" \
   -d '{
     "source": "manual",
@@ -105,8 +128,28 @@ curl -X POST http://localhost:8000/api/v1/services/dependencies \
 
 # Query downstream dependencies
 curl "http://localhost:8000/api/v1/services/api-gateway/dependencies?direction=downstream&depth=3" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+  -H "Authorization: Bearer demo-api-key-for-testing"
 ```
+
+### Interactive Demo
+
+Run the Streamlit demo for a visual walkthrough of all features:
+
+```bash
+# After running setup_demo.sh
+streamlit run demo/streamlit_demo.py
+```
+
+The demo includes:
+1. **FR-1: Ingest Graph** — Load 8 services and 10 dependency edges
+2. **FR-1: Query Subgraph** — Visualize the dependency graph
+3. **FR-2 + FR-7: Recommendations** — Generate 3-tier SLO recommendations with explainability
+4. **FR-5: Accept SLO** — Accept a recommendation as the active SLO
+5. **FR-5: Modify SLO** — Modify an active SLO target
+6. **FR-4: Impact Analysis** — Analyze upstream impact of proposed SLO changes
+7. **FR-5: Audit History** — View full audit trail of SLO lifecycle actions
+
+Use the demo API key: `demo-api-key-for-testing`
 
 ## Project Structure
 
@@ -195,10 +238,13 @@ alembic revision --autogenerate -m "description"  # Generate new migration
 
 ```bash
 docker-compose up --build           # Start full stack
-docker-compose down -v              # Stop and reset database
+docker-compose down                 # Stop services (keeps data)
+docker-compose down -v              # Stop and delete all data
 docker-compose logs -f app          # Follow API logs
 docker build -t slo-engine --target api .  # Build API image
 ```
+
+**Note:** After `docker-compose down -v`, you'll need to run `./demo/setup_demo.sh` again to recreate the database and seed data.
 
 ## API Endpoints
 
