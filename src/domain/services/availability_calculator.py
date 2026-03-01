@@ -32,9 +32,9 @@ class AvailabilityCalculator:
     ) -> dict[TierLevel, RecommendationTier]:
         """Compute three-tier availability recommendation.
 
-        Conservative: p99.9 floor (most pessimistic 0.1% of history), capped by composite bound
-        Balanced: p99 (most pessimistic 1% of history), capped by composite bound
-        Aggressive: p95 (most pessimistic 5% of history), NOT capped (shows achievable potential)
+        Conservative: p0.1 floor (lowest target, easiest to meet), capped by composite bound
+        Balanced: p1 (moderate target), capped by composite bound
+        Aggressive: p5 (highest target, hardest to meet), NOT capped
 
         Args:
             historical_availability: Mean availability over the full window (0.0-1.0)

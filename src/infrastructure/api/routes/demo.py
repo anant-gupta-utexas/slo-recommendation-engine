@@ -295,9 +295,9 @@ def _generate_demo_availability_recommendation(
         tiers={
             "conservative": TierApiModel(
                 level="conservative",
-                target=99.99,
-                error_budget_monthly_minutes=4.32,
-                confidence_interval=(99.985, 99.995),
+                target=99.9,
+                error_budget_monthly_minutes=43.2,
+                confidence_interval=(99.85, 99.95),
                 estimated_breach_probability=0.02,
                 percentile=None,
                 target_ms=None,
@@ -313,9 +313,9 @@ def _generate_demo_availability_recommendation(
             ),
             "aggressive": TierApiModel(
                 level="aggressive",
-                target=99.9,
-                error_budget_monthly_minutes=43.2,
-                confidence_interval=(99.85, 99.95),
+                target=99.99,
+                error_budget_monthly_minutes=4.32,
+                confidence_interval=(99.985, 99.995),
                 estimated_breach_probability=0.15,
                 percentile=None,
                 target_ms=None,
@@ -324,9 +324,9 @@ def _generate_demo_availability_recommendation(
         explanation=ExplanationApiModel(
             summary=(
                 f"Availability recommendation for {service_id} is based on synthetic demo data. "
-                f"Conservative tier (99.99%) provides highest reliability with minimal error budget. "
+                f"Conservative tier (99.9%) is the safest target with the largest error budget. "
                 f"Balanced tier (99.95%) offers good reliability with reasonable operational flexibility. "
-                f"Aggressive tier (99.9%) maximizes development velocity at cost of stricter uptime requirements."
+                f"Aggressive tier (99.99%) targets highest reliability but has the tightest error budget."
             ),
             feature_attribution=[
                 FeatureAttributionApiModel(
@@ -402,12 +402,12 @@ def _generate_demo_latency_recommendation(
         tiers={
             "conservative": TierApiModel(
                 level="conservative",
-                target=100,
+                target=500,
                 error_budget_monthly_minutes=None,
-                confidence_interval=(95, 105),
+                confidence_interval=(480, 520),
                 estimated_breach_probability=0.03,
-                percentile="p99",
-                target_ms=100,
+                percentile="p999",
+                target_ms=500,
             ),
             "balanced": TierApiModel(
                 level="balanced",
@@ -420,20 +420,20 @@ def _generate_demo_latency_recommendation(
             ),
             "aggressive": TierApiModel(
                 level="aggressive",
-                target=500,
+                target=100,
                 error_budget_monthly_minutes=None,
-                confidence_interval=(480, 520),
+                confidence_interval=(95, 105),
                 estimated_breach_probability=0.12,
-                percentile="p99",
-                target_ms=500,
+                percentile="p95",
+                target_ms=100,
             ),
         },
         explanation=ExplanationApiModel(
             summary=(
                 f"Latency recommendation for {service_id} targets p99 latency thresholds. "
-                f"Conservative tier (100ms p99) ensures exceptional user experience. "
+                f"Conservative tier (500ms p999) accommodates tail latency with the most headroom. "
                 f"Balanced tier (200ms p99) provides good performance with operational flexibility. "
-                f"Aggressive tier (500ms p99) accommodates complex workflows while maintaining acceptable UX."
+                f"Aggressive tier (100ms p95) targets the tightest latency budget for best user experience."
             ),
             feature_attribution=[
                 FeatureAttributionApiModel(

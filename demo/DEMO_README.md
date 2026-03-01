@@ -5,7 +5,7 @@ Visual, interactive walkthrough of the SLO Recommendation Engine features (FR-1 
 ## Quick Start (one command)
 
 ```bash
-./scripts/setup_demo.sh
+./demo/setup_demo.sh
 ```
 
 This script handles everything:
@@ -18,7 +18,7 @@ This script handles everything:
 Once complete, run:
 
 ```bash
-streamlit run scripts/streamlit_demo.py
+streamlit run demo/streamlit_demo.py
 ```
 
 Paste the API key shown by the setup script into the sidebar (`demo-api-key-for-testing`).
