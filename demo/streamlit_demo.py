@@ -1,6 +1,6 @@
 """
 SLO Recommendation Engine - Interactive Streamlit Demo
-Walks through FR-1 through FR-7 with visual UI, editable inputs, and formatted results.
+Walks through the full workflow with visual UI, editable inputs, and formatted results.
 
 Usage:
     streamlit run scripts/streamlit_demo.py
@@ -21,13 +21,13 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 
 STEPS = [
-    "1. Ingest Dependency Graph (FR-1)",
-    "2. Query Subgraph (FR-1)",
-    "3. SLO Recommendations (FR-2 + FR-7)",
-    "4. Accept SLO (FR-5)",
-    "5. Modify SLO (FR-5)",
-    "6. Impact Analysis (FR-4)",
-    "7. Audit History (FR-5)",
+    "1. Ingest Dependency Graph",
+    "2. Query Subgraph",
+    "3. SLO Recommendations",
+    "4. Accept SLO",
+    "5. Modify SLO",
+    "6. Impact Analysis",
+    "7. Audit History",
 ]
 
 DEMO_DATA_BY_SOURCE = {
@@ -341,7 +341,7 @@ def draw_dependency_graph(nodes: list[dict], edges: list[dict]):
 
 
 def render_step_1():
-    st.header("Step 1: Ingest Dependency Graph (FR-1)")
+    st.header("Step 1: Ingest Dependency Graph")
     st.caption("POST /api/v1/demo/dependencies (demo endpoint with immediate circular detection)")
 
     # Initialize demo_data_loaded flag if not present
@@ -504,7 +504,7 @@ def render_step_1():
 
 
 def render_step_2():
-    st.header("Step 2: Query Dependency Subgraph (FR-1)")
+    st.header("Step 2: Query Dependency Subgraph")
     st.caption("GET /api/v1/services/{service_id}/dependencies")
 
     if not check_prereqs([1], {1: "Please complete Step 1 (Ingest Graph) first."}):
@@ -581,7 +581,7 @@ def _render_tier_card(tier_data: dict, sli_type: str):
 
 
 def render_step_3():
-    st.header("Step 3: SLO Recommendations (FR-2 + FR-7)")
+    st.header("Step 3: SLO Recommendations")
     st.caption("GET /api/v1/services/{service_id}/slo-recommendations")
 
     if not check_prereqs([1], {1: "Please complete Step 1 (Ingest Graph) first."}):
@@ -643,7 +643,7 @@ def render_step_3():
 
                     counterfactuals = explanation.get("counterfactuals", [])
                     if counterfactuals:
-                        with st.expander("FR-7: Counterfactual Explanations"):
+                        with st.expander("Counterfactual Explanations"):
                             st.info("What-if scenarios showing how changes affect recommendations")
                             for cf in counterfactuals:
                                 st.markdown(f"**If** {cf.get('condition', '')}")
@@ -652,7 +652,7 @@ def render_step_3():
 
                     provenance = explanation.get("provenance")
                     if provenance:
-                        with st.expander("FR-7: Data Provenance"):
+                        with st.expander("Data Provenance"):
                             prov_df = pd.DataFrame([
                                 {"Field": k, "Value": str(v)}
                                 for k, v in provenance.items()
@@ -675,7 +675,7 @@ def render_step_3():
 
 
 def render_step_4():
-    st.header("Step 4: Accept SLO Recommendation (FR-5)")
+    st.header("Step 4: Accept SLO Recommendation")
     st.caption("POST /api/v1/services/{service_id}/slos")
 
     if not check_prereqs([3], {3: "Please complete Step 3 (Get Recommendations) first."}):
@@ -747,7 +747,7 @@ def render_step_4():
 
 
 def render_step_5():
-    st.header("Step 5: Modify SLO (FR-5)")
+    st.header("Step 5: Modify SLO")
     st.caption("POST /api/v1/services/{service_id}/slos (action=modify)")
 
     if not check_prereqs([4], {4: "Please complete Step 4 (Accept SLO) first."}):
@@ -834,7 +834,7 @@ def render_step_5():
 
 
 def render_step_6():
-    st.header("Step 6: Impact Analysis (FR-4)")
+    st.header("Step 6: Impact Analysis")
     st.caption("POST /api/v1/slos/impact-analysis")
 
     if not check_prereqs([4], {4: "Please complete Step 4 (Accept SLO) first."}):
@@ -904,7 +904,7 @@ def render_step_6():
 
 
 def render_step_7():
-    st.header("Step 7: Audit History (FR-5)")
+    st.header("Step 7: Audit History")
     st.caption("GET /api/v1/services/{service_id}/slo-history")
 
     if not check_prereqs([4], {4: "Please complete Step 4 (Accept SLO) first."}):
@@ -1002,14 +1002,6 @@ def render_sidebar():
 
         st.subheader("Navigation")
         step = st.radio("Step", STEPS, label_visibility="collapsed")
-
-        st.divider()
-
-        st.subheader("Progress")
-        for i, s in enumerate(STEPS, 1):
-            completed = st.session_state.get(f"step_{i}_completed", False)
-            icon = "✅" if completed else "⬜"
-            st.caption(f"{icon} {s}")
 
         st.divider()
 
