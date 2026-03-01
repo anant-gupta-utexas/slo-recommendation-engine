@@ -5,6 +5,7 @@ Excludes health check endpoints from authentication requirements.
 """
 
 import bcrypt
+import structlog
 from datetime import datetime, timezone
 from fastapi import Request, HTTPException, status
 from sqlalchemy import select, update
@@ -12,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models import ApiKeyModel
 from src.infrastructure.database.session import get_async_session
+from src.infrastructure.config.settings import Settings
+
+logger = structlog.get_logger(__name__)
 
 
 # Endpoints that don't require authentication
@@ -42,6 +46,17 @@ async def verify_api_key(request: Request) -> str:
     Raises:
         HTTPException: 401 if API key is missing, invalid, or revoked
     """
+    # In development/staging, skip authentication entirely for demo purposes
+    settings = Settings()
+    if settings.environment in ["development", "staging"]:
+        logger.debug(
+            "auth_bypassed",
+            environment=settings.environment,
+            path=request.url.path,
+            reason="demo_mode",
+        )
+        return "demo-user"
+
     # Skip authentication for excluded paths
     if request.url.path in EXCLUDED_PATHS:
         return "health-check"

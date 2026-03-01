@@ -205,9 +205,10 @@ class SloEngineClient:
         )
 
     def get_recommendations(self, service_id: str, sli_type: str, lookback_days: int) -> dict | None:
+        # Use demo endpoint that returns synthetic data without requiring telemetry
         return self._request(
             "GET",
-            f"/api/v1/services/{service_id}/slo-recommendations",
+            f"/api/v1/demo/services/{service_id}/slo-recommendations",
             params={"sli_type": sli_type, "lookback_days": lookback_days},
         )
 

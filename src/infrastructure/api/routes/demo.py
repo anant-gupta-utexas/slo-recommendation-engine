@@ -6,9 +6,9 @@ enabled in production. They provide enhanced responses with simulated data
 to showcase features that may run asynchronously in production.
 """
 
-from uuid import uuid4
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from src.application.dtos.dependency_graph_dto import (
     CircularDependencyInfo,
@@ -19,22 +19,18 @@ from src.application.dtos.dependency_graph_dto import (
     NodeDTO,
     RetryConfigDTO,
 )
-from src.domain.entities.circular_dependency_alert import AlertStatus
 from src.application.use_cases.detect_circular_dependencies import (
     DetectCircularDependenciesUseCase,
 )
 from src.application.use_cases.ingest_dependency_graph import (
     IngestDependencyGraphUseCase,
 )
+from src.domain.entities.circular_dependency_alert import AlertStatus
 from src.infrastructure.api.dependencies import (
     get_circular_dependency_alert_repository,
     get_detect_circular_dependencies_use_case,
     get_ingest_dependency_graph_use_case,
 )
-from src.infrastructure.database.repositories.circular_dependency_alert_repository import (
-    CircularDependencyAlertRepository,
-)
-from src.infrastructure.api.middleware.auth import verify_api_key
 from src.infrastructure.api.schemas.dependency_schema import (
     CircularDependencyInfoApiModel,
     ConflictInfoApiModel,
@@ -42,6 +38,21 @@ from src.infrastructure.api.schemas.dependency_schema import (
     DependencyGraphIngestApiResponse,
 )
 from src.infrastructure.api.schemas.error_schema import ProblemDetails
+from src.infrastructure.api.schemas.slo_recommendation_schema import (
+    CounterfactualApiModel,
+    DataProvenanceApiModel,
+    DataQualityApiModel,
+    DependencyImpactApiModel,
+    ExplanationApiModel,
+    FeatureAttributionApiModel,
+    LookbackWindowApiModel,
+    RecommendationApiModel,
+    SloRecommendationApiResponse,
+    TierApiModel,
+)
+from src.infrastructure.database.repositories.circular_dependency_alert_repository import (
+    CircularDependencyAlertRepository,
+)
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
@@ -243,6 +254,7 @@ async def demo_clear_all_data(
     """
     try:
         from sqlalchemy import text
+
         from src.infrastructure.database.session import get_async_session
 
         # Get a database session
@@ -271,3 +283,273 @@ async def demo_clear_all_data(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear data: {str(e)}",
         ) from e
+
+
+def _generate_demo_availability_recommendation(
+    service_id: str,
+) -> RecommendationApiModel:
+    """Generate synthetic availability recommendation for demo."""
+    return RecommendationApiModel(
+        sli_type="availability",
+        metric="success_rate",
+        tiers={
+            "conservative": TierApiModel(
+                level="conservative",
+                target=99.99,
+                error_budget_monthly_minutes=4.32,
+                confidence_interval=(99.985, 99.995),
+                estimated_breach_probability=0.02,
+                percentile=None,
+                target_ms=None,
+            ),
+            "balanced": TierApiModel(
+                level="balanced",
+                target=99.95,
+                error_budget_monthly_minutes=21.6,
+                confidence_interval=(99.93, 99.97),
+                estimated_breach_probability=0.08,
+                percentile=None,
+                target_ms=None,
+            ),
+            "aggressive": TierApiModel(
+                level="aggressive",
+                target=99.9,
+                error_budget_monthly_minutes=43.2,
+                confidence_interval=(99.85, 99.95),
+                estimated_breach_probability=0.15,
+                percentile=None,
+                target_ms=None,
+            ),
+        },
+        explanation=ExplanationApiModel(
+            summary=(
+                f"Availability recommendation for {service_id} is based on synthetic demo data. "
+                f"Conservative tier (99.99%) provides highest reliability with minimal error budget. "
+                f"Balanced tier (99.95%) offers good reliability with reasonable operational flexibility. "
+                f"Aggressive tier (99.9%) maximizes development velocity at cost of stricter uptime requirements."
+            ),
+            feature_attribution=[
+                FeatureAttributionApiModel(
+                    feature="historical_uptime",
+                    contribution=0.45,
+                    description="Service has demonstrated 99.92% uptime over past 30 days",
+                ),
+                FeatureAttributionApiModel(
+                    feature="traffic_volume",
+                    contribution=0.25,
+                    description="Moderate traffic (12K req/min) supports stable SLO targets",
+                ),
+                FeatureAttributionApiModel(
+                    feature="dependency_stability",
+                    contribution=0.20,
+                    description="All hard dependencies have active SLOs ≥99.9%",
+                ),
+                FeatureAttributionApiModel(
+                    feature="deployment_frequency",
+                    contribution=0.10,
+                    description="Weekly deployments with <0.1% rollback rate",
+                ),
+            ],
+            dependency_impact=DependencyImpactApiModel(
+                composite_availability_bound=99.85,
+                bottleneck_service="auth-service",
+                bottleneck_contribution="auth-service contributes 0.08% to composite availability bound degradation",
+                hard_dependency_count=3,
+                soft_dependency_count=1,
+            ),
+            counterfactuals=[
+                CounterfactualApiModel(
+                    condition="If auth-service SLO increased from 99.9% to 99.95%",
+                    result="Composite availability bound would improve to 99.92%, enabling higher SLO target",
+                    feature="dependency_stability",
+                    original_value=99.85,
+                    perturbed_value=99.92,
+                ),
+                CounterfactualApiModel(
+                    condition="If deployment frequency doubled to 2x/week",
+                    result="Recommended tier would shift to 'conservative' (99.99%) due to increased change risk",
+                    feature="deployment_frequency",
+                    original_value=1.0,
+                    perturbed_value=2.0,
+                ),
+            ],
+            provenance=DataProvenanceApiModel(
+                dependency_graph_version="demo-v1",
+                telemetry_window_start=(datetime.now(UTC) - timedelta(days=30)).isoformat(),
+                telemetry_window_end=datetime.now(UTC).isoformat(),
+                data_completeness=0.95,
+                computation_method="monte_carlo_simulation",
+                telemetry_source="synthetic_demo_data",
+            ),
+        ),
+        data_quality=DataQualityApiModel(
+            data_completeness=0.95,
+            telemetry_gaps=[],
+            confidence_note="Demo data - synthetically generated for demonstration purposes",
+            is_cold_start=False,
+            lookback_days_actual=30,
+        ),
+    )
+
+
+def _generate_demo_latency_recommendation(
+    service_id: str,
+) -> RecommendationApiModel:
+    """Generate synthetic latency recommendation for demo."""
+    return RecommendationApiModel(
+        sli_type="latency",
+        metric="p99_latency_ms",
+        tiers={
+            "conservative": TierApiModel(
+                level="conservative",
+                target=100,
+                error_budget_monthly_minutes=None,
+                confidence_interval=(95, 105),
+                estimated_breach_probability=0.03,
+                percentile="p99",
+                target_ms=100,
+            ),
+            "balanced": TierApiModel(
+                level="balanced",
+                target=200,
+                error_budget_monthly_minutes=None,
+                confidence_interval=(190, 210),
+                estimated_breach_probability=0.07,
+                percentile="p99",
+                target_ms=200,
+            ),
+            "aggressive": TierApiModel(
+                level="aggressive",
+                target=500,
+                error_budget_monthly_minutes=None,
+                confidence_interval=(480, 520),
+                estimated_breach_probability=0.12,
+                percentile="p99",
+                target_ms=500,
+            ),
+        },
+        explanation=ExplanationApiModel(
+            summary=(
+                f"Latency recommendation for {service_id} targets p99 latency thresholds. "
+                f"Conservative tier (100ms p99) ensures exceptional user experience. "
+                f"Balanced tier (200ms p99) provides good performance with operational flexibility. "
+                f"Aggressive tier (500ms p99) accommodates complex workflows while maintaining acceptable UX."
+            ),
+            feature_attribution=[
+                FeatureAttributionApiModel(
+                    feature="p99_baseline",
+                    contribution=0.50,
+                    description="Current p99 latency averages 180ms over past 30 days",
+                ),
+                FeatureAttributionApiModel(
+                    feature="cache_hit_rate",
+                    contribution=0.25,
+                    description="85% cache hit rate reduces backend latency",
+                ),
+                FeatureAttributionApiModel(
+                    feature="dependency_latency",
+                    contribution=0.15,
+                    description="Downstream services contribute ~50ms to request path",
+                ),
+                FeatureAttributionApiModel(
+                    feature="request_complexity",
+                    contribution=0.10,
+                    description="Average request involves 3 downstream calls",
+                ),
+            ],
+            dependency_impact=None,  # Latency doesn't use composite bounds
+            counterfactuals=[
+                CounterfactualApiModel(
+                    condition="If cache hit rate improved from 85% to 95%",
+                    result="p99 latency would decrease to ~150ms, enabling 'conservative' tier",
+                    feature="cache_hit_rate",
+                    original_value=0.85,
+                    perturbed_value=0.95,
+                ),
+                CounterfactualApiModel(
+                    condition="If downstream service latency increased by 50ms",
+                    result="p99 latency would increase to ~230ms, requiring 'balanced' tier adjustment",
+                    feature="dependency_latency",
+                    original_value=50.0,
+                    perturbed_value=100.0,
+                ),
+            ],
+            provenance=DataProvenanceApiModel(
+                dependency_graph_version="demo-v1",
+                telemetry_window_start=(datetime.now(UTC) - timedelta(days=30)).isoformat(),
+                telemetry_window_end=datetime.now(UTC).isoformat(),
+                data_completeness=0.93,
+                computation_method="percentile_estimation",
+                telemetry_source="synthetic_demo_data",
+            ),
+        ),
+        data_quality=DataQualityApiModel(
+            data_completeness=0.93,
+            telemetry_gaps=[],
+            confidence_note="Demo data - synthetically generated for demonstration purposes",
+            is_cold_start=False,
+            lookback_days_actual=30,
+        ),
+    )
+
+
+@router.get(
+    "/services/{service_id}/slo-recommendations",
+    response_model=SloRecommendationApiResponse,
+    status_code=status.HTTP_200_OK,
+    summary="[DEMO] Get synthetic SLO recommendations",
+    description="""
+    Demo endpoint that returns synthetic SLO recommendations without requiring telemetry data.
+
+    **DEMO ONLY**: This endpoint returns pre-generated recommendations for demonstration purposes.
+    In production, use /api/v1/services/{service_id}/slo-recommendations which analyzes real telemetry.
+
+    This endpoint:
+    - Returns availability and/or latency recommendations based on sli_type filter
+    - Includes all FR-7 explainability features (feature attribution, counterfactuals, provenance)
+    - Does NOT require actual telemetry data collection
+    - Perfect for UI development, demos, and integration testing
+
+    **DO NOT USE IN PRODUCTION** - Use /api/v1/services/{service_id}/slo-recommendations instead.
+    """,
+)
+async def demo_get_slo_recommendations(
+    service_id: str = Path(..., description="Service identifier"),
+    sli_type: str = Query(
+        "all",
+        description="SLI type filter: availability, latency, or all",
+        pattern="^(availability|latency|all)$",
+    ),
+    lookback_days: int = Query(
+        30,
+        ge=7,
+        le=365,
+        description="Lookback window in days (cosmetic for demo)",
+    ),
+) -> SloRecommendationApiResponse:
+    """
+    Get synthetic SLO recommendations for demo purposes.
+
+    Returns pre-generated recommendations with full explainability features
+    without requiring actual telemetry data collection.
+    """
+    # Generate recommendations based on sli_type filter
+    recommendations = []
+
+    if sli_type in ["all", "availability"]:
+        recommendations.append(_generate_demo_availability_recommendation(service_id))
+
+    if sli_type in ["all", "latency"]:
+        recommendations.append(_generate_demo_latency_recommendation(service_id))
+
+    # Build response
+    now = datetime.now(UTC)
+    return SloRecommendationApiResponse(
+        service_id=service_id,
+        generated_at=now.isoformat(),
+        lookback_window=LookbackWindowApiModel(
+            start=(now - timedelta(days=lookback_days)).isoformat(),
+            end=now.isoformat(),
+        ),
+        recommendations=recommendations,
+    )
