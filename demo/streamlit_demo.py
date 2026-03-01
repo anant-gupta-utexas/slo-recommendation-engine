@@ -16,6 +16,8 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from concept_renderer import render_circular_dep_concepts, render_reference_page, render_step_concepts
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -28,6 +30,7 @@ STEPS = [
     "5. Modify SLO",
     "6. Impact Analysis",
     "7. Audit History",
+    "Concepts & Reference",
 ]
 
 DEMO_DATA_BY_SOURCE = {
@@ -343,6 +346,7 @@ def draw_dependency_graph(nodes: list[dict], edges: list[dict]):
 def render_step_1():
     st.header("Step 1: Ingest Dependency Graph")
     st.caption("POST /api/v1/demo/dependencies (demo endpoint with immediate circular detection)")
+    render_step_concepts(1)
 
     # Initialize demo_data_loaded flag if not present
     if "demo_data_loaded" not in st.session_state:
@@ -488,6 +492,9 @@ def render_step_1():
             for cd in circ:
                 st.warning(f"⚠️ Circular dependency: {' -> '.join(cd.get('cycle_path', []))}")
 
+            if circ:
+                render_circular_dep_concepts()
+
             # Display conflicts
             if conflicts:
                 with st.expander(f"🔀 {len(conflicts)} Edge Conflict(s) Resolved", expanded=len(conflicts) > 0):
@@ -506,6 +513,7 @@ def render_step_1():
 def render_step_2():
     st.header("Step 2: Query Dependency Subgraph")
     st.caption("GET /api/v1/services/{service_id}/dependencies")
+    render_step_concepts(2)
 
     if not check_prereqs([1], {1: "Please complete Step 1 (Ingest Graph) first."}):
         return
@@ -583,6 +591,7 @@ def _render_tier_card(tier_data: dict, sli_type: str):
 def render_step_3():
     st.header("Step 3: SLO Recommendations")
     st.caption("GET /api/v1/services/{service_id}/slo-recommendations")
+    render_step_concepts(3)
 
     if not check_prereqs([1], {1: "Please complete Step 1 (Ingest Graph) first."}):
         return
@@ -749,6 +758,7 @@ def render_step_4():
 def render_step_5():
     st.header("Step 5: Modify SLO")
     st.caption("POST /api/v1/services/{service_id}/slos (action=modify)")
+    render_step_concepts(5)
 
     if not check_prereqs([4], {4: "Please complete Step 4 (Accept SLO) first."}):
         return
@@ -836,6 +846,7 @@ def render_step_5():
 def render_step_6():
     st.header("Step 6: Impact Analysis")
     st.caption("POST /api/v1/slos/impact-analysis")
+    render_step_concepts(6)
 
     if not check_prereqs([4], {4: "Please complete Step 4 (Accept SLO) first."}):
         return
@@ -1044,6 +1055,7 @@ def main():
         5: render_step_5,
         6: render_step_6,
         7: render_step_7,
+        8: render_reference_page,
     }
     step_renderers[step_idx]()
 
