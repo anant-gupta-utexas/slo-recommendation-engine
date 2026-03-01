@@ -127,13 +127,15 @@ class QueryDependencySubgraphUseCase:
             for edge in edges
         ]
 
-        # Compute statistics: count unique services excluding the starting service
-        upstream_count = 0
-        downstream_count = 0
+        # Compute statistics: count unique services reachable in each direction
+        # by traversing edges from the root, rather than inferring direction
+        # from edge source/target fields on the merged edge set.
 
-        # Collect unique upstream and downstream service IDs from edges
-        upstream_service_ids: set[str] = set()
-        downstream_service_ids: set[str] = set()
+        # Build adjacency lists for both directions
+        # Downstream: follow source -> target from root
+        downstream_adj: dict[str, set[str]] = {}
+        # Upstream: follow target -> source from root
+        upstream_adj: dict[str, set[str]] = {}
 
         for edge in edges:
             source_id = self._get_service_id_from_uuid(
@@ -142,15 +144,35 @@ class QueryDependencySubgraphUseCase:
             target_id = self._get_service_id_from_uuid(
                 edge.target_service_id, nodes
             )
+            downstream_adj.setdefault(source_id, set()).add(target_id)
+            upstream_adj.setdefault(target_id, set()).add(source_id)
 
-            if request.direction in ("downstream", "both"):
-                # Target services in edges are downstream
-                if target_id != request.service_id:
-                    downstream_service_ids.add(target_id)
-            if request.direction in ("upstream", "both"):
-                # Source services in edges are upstream
-                if source_id != request.service_id:
-                    upstream_service_ids.add(source_id)
+        downstream_service_ids: set[str] = set()
+        upstream_service_ids: set[str] = set()
+
+        if request.direction in ("downstream", "both"):
+            # BFS from root following source -> target edges
+            queue = [request.service_id]
+            visited: set[str] = {request.service_id}
+            while queue:
+                current = queue.pop(0)
+                for neighbor in downstream_adj.get(current, []):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        downstream_service_ids.add(neighbor)
+                        queue.append(neighbor)
+
+        if request.direction in ("upstream", "both"):
+            # BFS from root following target -> source edges
+            queue = [request.service_id]
+            visited = {request.service_id}
+            while queue:
+                current = queue.pop(0)
+                for neighbor in upstream_adj.get(current, []):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        upstream_service_ids.add(neighbor)
+                        queue.append(neighbor)
 
         upstream_count = len(upstream_service_ids)
         downstream_count = len(downstream_service_ids)
