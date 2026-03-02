@@ -75,6 +75,48 @@ MULTI_SOURCE_DISCOVERY = Concept(
 # Step 2: Query Subgraph
 # ---------------------------------------------------------------------------
 
+QUERY_SUBGRAPH = Concept(
+    title="Query Subgraph",
+    icon="🕸️",
+    summary=(
+        "A subgraph query returns the locally relevant neighborhood of a service — not the full graph. "
+        "You control **direction** (upstream / downstream / both) and **depth** (1-10 hops). "
+        "It's the foundational data primitive that powers SLO scoping, blast radius analysis, and constraint propagation."
+    ),
+    detail="""\
+Fetching all 5,000 services for every calculation is expensive and noisy. A subgraph query gives you precisely the services that matter for a given question.
+
+**Direction controls what question you're answering:**
+
+| Direction | Question | Use case |
+|---|---|---|
+| `downstream` | What does this service depend on? | Root cause analysis, SLO composite math |
+| `upstream` | Who calls this service? | Blast radius — who is affected if I degrade? |
+| `both` | Full local neighborhood | Deployment risk review, architecture audit |
+
+**Depth limits how far to walk:**
+- `depth=1` — direct deps only (fastest)
+- `depth=3` — typical for incident triage
+- `depth=10` — maximum, for full reachability analysis
+
+**Key advantages over full-graph queries:**
+
+| Advantage | Why it matters |
+|---|---|
+| Depth limiting | Prevents explosion — relevant neighborhood, not all 5,000 services |
+| Direction control | Upstream vs downstream are fundamentally different questions |
+| Stale edge filtering | `include_stale=false` shows only active deps, not historical artifacts |
+| Machine-readable output | CI/CD, alerting, and SLO engines can consume this programmatically |
+| Edge metadata (`timeout_ms`, `criticality`) | Enables downstream calculations — knowing a dep exists isn't enough |
+
+**Real use cases beyond visualization:**
+- **SLO scoping** — only propagate constraints through the downstream subgraph of a target service
+- **Blast radius** — upstream subgraph tells on-call engineers who is at risk during an incident
+- **Deployment gating** — CI/CD calls upstream query to count dependents before a rollout
+- **Constraint propagation** — FR-3 walks the downstream subgraph to cascade SLO budgets
+""",
+)
+
 COMPOSITE_AVAILABILITY = Concept(
     title="Composite Availability Math",
     icon="📐",
@@ -461,7 +503,7 @@ This is a conservative estimate — the actual joint availability could be sligh
 
 STEP_CONCEPTS: dict[int, list[Concept]] = {
     1: [HARD_VS_SOFT_DEPS, MULTI_SOURCE_DISCOVERY],
-    2: [COMPOSITE_AVAILABILITY, NODE_CRITICALITY_COLORS, CIRCULAR_DEPS_TARJAN],
+    2: [QUERY_SUBGRAPH, COMPOSITE_AVAILABILITY, NODE_CRITICALITY_COLORS, CIRCULAR_DEPS_TARJAN],
     3: [ERROR_RATE_VS_BUDGET, RECOMMENDATION_TIERS, ERROR_BUDGET_CONSUMPTION, COLD_START_TIMELINE],
     5: [RISK_CLASSIFICATION, BURN_RATE],
     6: [TOTAL_CONSUMPTION_RULE, RELIABILITY_LADDER],
@@ -472,6 +514,7 @@ CIRCULAR_DEP_CONCEPTS: list[Concept] = [CIRCULAR_DEP_REMEDIATION, CYCLE_CONTRACT
 ALL_CONCEPTS: list[Concept] = [
     HARD_VS_SOFT_DEPS,
     MULTI_SOURCE_DISCOVERY,
+    QUERY_SUBGRAPH,
     COMPOSITE_AVAILABILITY,
     NODE_CRITICALITY_COLORS,
     CIRCULAR_DEPS_TARJAN,

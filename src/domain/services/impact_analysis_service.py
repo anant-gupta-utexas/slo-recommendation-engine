@@ -132,7 +132,7 @@ class ImpactAnalysisService:
                 if slo_at_risk:
                     risk_detail = (
                         f"Composite drops below SLO target "
-                        f"({slo_target:.1f}% > {projected_pct:.2f}%)"
+                        f"({slo_target:.2f}% > {projected_pct:.2f}%)"
                     )
 
             relationship = "upstream" if depth == 1 else f"upstream (transitive, depth={depth})"
