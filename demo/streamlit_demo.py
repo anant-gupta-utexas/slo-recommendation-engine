@@ -804,7 +804,9 @@ def render_step_3():
                     with st.expander("Counterfactual Explanations"):
                         st.info("What-if scenarios showing how changes affect recommendations")
                         for cf in counterfactuals:
-                            st.markdown(f"**If** {cf.get('condition', '')}")
+                            condition = cf.get("condition", "")
+                            condition = condition[3:] if condition.lower().startswith("if ") else condition
+                            st.markdown(f"**If** {condition}")
                             st.markdown(f"**Then** {cf.get('result', '')}")
                             st.divider()
 
@@ -818,19 +820,16 @@ def render_step_3():
                         st.dataframe(prov_df, use_container_width=True, hide_index=True)
 
             dq = rec.get("data_quality", {})
-            if dq:
-                if dq.get("is_cold_start"):
-                    lookback_actual = dq.get("lookback_days_actual", "?")
-                    st.warning(
-                        f"Cold Start Detected: Only {lookback_actual} days of telemetry available. "
-                        "See the simulation below for the full maturity timeline."
-                    )
-                with st.expander("Data Quality"):
-                    completeness = dq.get("data_completeness", 0)
-                    st.progress(min(completeness, 1.0), text=f"Completeness: {completeness:.0%}")
-                    if dq.get("confidence_note"):
-                        st.caption(dq["confidence_note"])
-                    st.caption(f"Actual lookback window used: {dq.get('lookback_days_actual')} days")
+            if dq and dq.get("is_cold_start"):
+                lookback_actual = dq.get("lookback_days_actual", "?")
+                note = dq.get("confidence_note", "")
+                warning_text = (
+                    f"Cold Start Detected: Only {lookback_actual} days of telemetry available. "
+                    "See the simulation below for the full maturity timeline."
+                )
+                if note:
+                    warning_text += f" {note}"
+                st.warning(warning_text)
 
             st.divider()
 
