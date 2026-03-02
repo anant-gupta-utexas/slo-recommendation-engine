@@ -16,6 +16,7 @@
 - [Best Practices](#best-practices)
 - [Coverage Goals](#coverage-goals)
 - [Continuous Integration](#continuous-integration)
+- **[📊 Coverage Report](./coverage_report.md)** - Detailed coverage analysis (86%, 720/741 tests passing)
 
 ---
 
