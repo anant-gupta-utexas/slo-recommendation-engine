@@ -840,6 +840,13 @@ def render_step_3():
         json_expander("Raw JSON Response", resp)
 
 
+_TIER_RATIONALE = {
+    "conservative": "Conservative tier chosen to minimise risk during rollout; aligns with SRE sign-off requirements.",
+    "balanced": "Balanced tier aligns with team risk tolerance and SRE review.",
+    "aggressive": "Aggressive tier approved after load-test results confirmed headroom; accepted by service owner.",
+}
+
+
 def render_step_4():
     st.header("Step 4: Accept SLO Recommendation")
     st.caption("POST /api/v1/services/{service_id}/slos")
@@ -852,10 +859,22 @@ def render_step_4():
 
     service_id = st.selectbox("Service", services, index=default_idx, key="step4_svc")
     tier = st.selectbox("Tier", ["conservative", "balanced", "aggressive"], index=1, key="step4_tier")
-    rationale = st.text_area("Rationale", "Balanced tier aligns with team risk tolerance and SRE review", key="step4_rationale")
+    rationale = st.text_area("Rationale", _TIER_RATIONALE[tier], key="step4_rationale")
     actor = st.text_input("Actor email", "jane.doe@company.com", key="step4_actor")
 
-    accept_second = st.checkbox("Also accept for checkout-service", value=True, key="step4_also_checkout")
+    # Derive downstream services from the ingested edge list
+    edges_df = st.session_state.get("step1_edges_df")
+    if edges_df is not None and not edges_df.empty and service_id:
+        downstream = edges_df.loc[edges_df["source"] == service_id, "target"].tolist()
+    else:
+        downstream = []
+
+    also_accept = st.multiselect(
+        "Also accept for downstream services",
+        options=[s for s in services if s != service_id],
+        default=[s for s in downstream if s in services],
+        key="step4_also_accept",
+    )
 
     if st.button("Accept SLO", type="primary"):
         client = get_client()
@@ -888,20 +907,20 @@ def render_step_4():
 
             json_expander("Raw JSON Response", resp)
 
-        if accept_second and "checkout-service" in services:
-            payload2 = {
+        for downstream_svc in also_accept:
+            downstream_payload = {
                 "action": "accept",
-                "selected_tier": "balanced",
-                "rationale": "Standard balanced target for checkout flow",
-                "actor": "john.smith@company.com",
+                "selected_tier": tier,
+                "rationale": f"{_TIER_RATIONALE[tier]} (cascaded from {service_id})",
+                "actor": actor,
             }
-            with st.spinner("Accepting SLO for checkout-service..."):
-                resp2 = client.manage_slo("checkout-service", payload2)
-            if resp2:
-                if "checkout-service" not in st.session_state.services_with_slos:
-                    st.session_state.services_with_slos.append("checkout-service")
-                st.success(resp2.get("message", "SLO accepted for checkout-service!"))
-                json_expander("checkout-service JSON Response", resp2)
+            with st.spinner(f"Accepting SLO for {downstream_svc}..."):
+                resp_ds = client.manage_slo(downstream_svc, downstream_payload)
+            if resp_ds:
+                if downstream_svc not in st.session_state.services_with_slos:
+                    st.session_state.services_with_slos.append(downstream_svc)
+                st.success(resp_ds.get("message", f"SLO accepted for {downstream_svc}!"))
+                json_expander(f"{downstream_svc} JSON Response", resp_ds)
 
         # Verify active SLO
         if resp:
