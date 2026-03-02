@@ -11,7 +11,6 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.service import Service
-from src.domain.entities.service_dependency import DiscoverySource
 from src.infrastructure.database.repositories.service_repository import (
     ServiceRepository,
 )
@@ -133,13 +132,14 @@ class TestSloRecommendationWorkflow:
         # Create a service with seed data
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            description="Handles payments",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={
+                "display_name": "Payment Service",
+                "description": "Handles payments",
+            },
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         # Step 1: Get recommendations (will generate fresh)
         response1 = await async_client.get(
@@ -180,13 +180,14 @@ class TestSloRecommendationWorkflow:
         # Create a service without telemetry data
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="no-telemetry-service",
-            display_name="No Telemetry Service",
-            description="Service without any metrics",
-            owner_team="test-team",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="no-telemetry-service",
+            team="test-team",
+            metadata={
+                "display_name": "No Telemetry Service",
+                "description": "Service without any metrics",
+            },
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         # Request recommendations for service without data
         response = await async_client.get(
@@ -210,13 +211,14 @@ class TestSloRecommendationWorkflow:
         # Create service with seed data
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            description="Payment processing",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={
+                "display_name": "Payment Service",
+                "description": "Payment processing",
+            },
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         # Get recommendations
         response = await async_client.get(
@@ -291,13 +293,14 @@ class TestSloRecommendationWorkflow:
         # Create service and pre-generate recommendations
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            description="Payment processing",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={
+                "display_name": "Payment Service",
+                "description": "Payment processing",
+            },
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         # First request generates recommendation
         await async_client.get(
@@ -344,12 +347,11 @@ class TestSloRecommendationWorkflow:
         """Test that invalid sli_type returns 422."""
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="test-service",
-            display_name="Test Service",
-            owner_team="test",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="test-service",
+            team="test",
+            metadata={"display_name": "Test Service"},
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         response = await async_client.get(
             "/api/v1/services/test-service/slo-recommendations",
@@ -367,12 +369,11 @@ class TestSloRecommendationWorkflow:
         """Test that invalid lookback_days returns 422."""
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="test-service",
-            display_name="Test Service",
-            owner_team="test",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="test-service",
+            team="test",
+            metadata={"display_name": "Test Service"},
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         # Test too low
         response_low = await async_client.get(
@@ -413,12 +414,11 @@ class TestSloRecommendationWorkflow:
         """Test that latency recommendations are generated correctly."""
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={"display_name": "Payment Service"},
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         response = await async_client.get(
             "/api/v1/services/payment-service/slo-recommendations",
@@ -447,12 +447,11 @@ class TestSloRecommendationWorkflow:
         """Test that sli_type=all returns both availability and latency."""
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={"display_name": "Payment Service"},
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         response = await async_client.get(
             "/api/v1/services/payment-service/slo-recommendations",
@@ -480,12 +479,11 @@ class TestSloRecommendationWorkflow:
         """Test that recommendations include proper expiration timestamps."""
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={"display_name": "Payment Service"},
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         response = await async_client.get(
             "/api/v1/services/payment-service/slo-recommendations",
@@ -524,12 +522,11 @@ class TestSloRecommendationWorkflow:
 
         service_repo = ServiceRepository(db_session)
         service = Service(
-            id="payment-service",
-            display_name="Payment Service",
-            owner_team="payments",
-            discovery_source=DiscoverySource.MANUAL,
+            service_id="payment-service",
+            team="payments",
+            metadata={"display_name": "Payment Service"},
         )
-        await service_repo.add(service)
+        await service_repo.create(service)
 
         # Make 5 concurrent requests
         tasks = [

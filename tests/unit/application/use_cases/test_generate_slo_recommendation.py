@@ -153,29 +153,29 @@ def mock_availability_calculator():
 def mock_latency_calculator():
     """Mock latency calculator."""
     calc = MagicMock()
-    calc.compute_tiers.return_value = {
-        TierLevel.CONSERVATIVE: RecommendationTier(
+    calc.compute_tiers.return_value = [
+        RecommendationTier(
             level=TierLevel.CONSERVATIVE,
             target=1200.0,
             percentile="p99.9",
             target_ms=1200,
             estimated_breach_probability=0.01,
         ),
-        TierLevel.BALANCED: RecommendationTier(
+        RecommendationTier(
             level=TierLevel.BALANCED,
             target=800.0,
             percentile="p99",
             target_ms=800,
             estimated_breach_probability=0.05,
         ),
-        TierLevel.AGGRESSIVE: RecommendationTier(
+        RecommendationTier(
             level=TierLevel.AGGRESSIVE,
             target=500.0,
             percentile="p95",
             target_ms=500,
             estimated_breach_probability=0.12,
         ),
-    }
+    ]
     return calc
 
 
@@ -470,7 +470,7 @@ async def test_execute_queries_dependency_subgraph(use_case, mock_graph_traversa
     mock_graph_traversal_service.get_subgraph.assert_called_once()
     call_args = mock_graph_traversal_service.get_subgraph.call_args
     assert call_args.kwargs["max_depth"] == 3
-    assert call_args.kwargs["include_soft"] is True
+    assert call_args.kwargs["include_stale"] is False
 
 
 @pytest.mark.asyncio
