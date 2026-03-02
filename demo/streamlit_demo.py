@@ -588,6 +588,154 @@ def _render_tier_card(tier_data: dict, sli_type: str):
         st.caption(f"CI: [{ci[0]}, {ci[1]}]")
 
 
+def _render_cold_start_simulation(resp: dict):
+    """Render an interactive simulation of the cold-start → mature SLO timeline."""
+    st.subheader("Cold Start & SLO Timeline Simulation")
+    st.caption(
+        "Drag the slider to experience the full maturity journey. "
+        "Day 0 uses dependency data only; later days blend in telemetry."
+    )
+
+    recommendations = resp.get("recommendations", [])
+    if not recommendations:
+        st.info("No recommendations available to anchor simulation.")
+        return
+
+    # --- Extract anchor values from real API response ---
+    avail_rec = next((r for r in recommendations if r.get("sli_type") == "availability"), None)
+    if avail_rec is None:
+        avail_rec = recommendations[0]
+
+    real_dq = avail_rec.get("data_quality", {})
+    real_completeness = real_dq.get("data_completeness", 0.9)
+
+    dep_impact = avail_rec.get("explanation", {}).get("dependency_impact") or {}
+    composite_bound = dep_impact.get("composite_availability_bound", 99.9)
+    bottleneck_service = dep_impact.get("bottleneck_service", "N/A")
+    hard_dep_count = dep_impact.get("hard_dependency_count", "N/A")
+
+    real_tiers = avail_rec.get("tiers", {})
+
+    # --- Slider ---
+    sim_day = st.slider("Service age (days since deploy)", 0, 45, 0, key="step3_sim_day")
+
+    # --- Phase classification ---
+    if sim_day == 0:
+        phase = "Pre-Deploy"
+        phase_color = "blue"
+        phase_desc = "No telemetry yet. Ceiling derived from dependency graph alone."
+    elif sim_day <= 7:
+        phase = "Cold Start"
+        phase_color = "orange"
+        phase_desc = "Sparse telemetry. Wide confidence intervals. Conservative targets only."
+    elif sim_day <= 30:
+        phase = "Warming"
+        phase_color = "yellow"
+        phase_desc = "Baseline building. Confidence improving. Targets stabilising."
+    else:
+        phase = "Mature"
+        phase_color = "green"
+        phase_desc = "Stable baseline. Values match the live recommendation above."
+
+    # --- Confidence interpolation ---
+    if sim_day == 0:
+        sim_confidence = 0.25
+    elif sim_day <= 7:
+        sim_confidence = 0.30 + (sim_day - 1) / 6 * (0.60 - 0.30)
+    elif sim_day <= 30:
+        sim_confidence = 0.60 + (sim_day - 8) / 22 * (real_completeness - 0.60)
+    else:
+        sim_confidence = real_completeness
+
+    # --- Phase banner + confidence metric ---
+    banner_col, metric_col = st.columns([3, 1])
+    with banner_col:
+        st.markdown(f"**Phase:** :{phase_color}[{phase}]")
+        st.caption(phase_desc)
+    with metric_col:
+        st.metric("Confidence Score", f"{sim_confidence:.0%}")
+
+    # --- Progress bar ---
+    st.progress(min(sim_confidence, 1.0), text=f"Data completeness: {sim_confidence:.0%}")
+
+    # --- Contextual inline message ---
+    if phase == "Cold Start":
+        st.warning("Wide confidence intervals: the system plays safe with lower targets until more data arrives.")
+    elif phase == "Warming":
+        st.info("Confidence intervals narrowing as baseline accumulates. Targets trending toward mature values.")
+    elif phase == "Mature":
+        st.success("Mature baseline reached. Values match actual recommendation above.")
+
+    # --- Main panel ---
+    if sim_day == 0:
+        st.info("Pre-deployment mode: theoretical SLO ceiling from dependency data only.")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Theoretical SLO Ceiling", f"{composite_bound}%")
+        c2.metric("Ceiling Set By", str(bottleneck_service))
+        c3.metric("Hard Dependencies", str(hard_dep_count))
+        st.caption("Even perfect service code cannot exceed this ceiling.")
+    else:
+        # Synthesize simulated tier cards from real mature tiers
+        # CI half-width shrinks from 8x (day 1) → 1x (day 31+)
+        if sim_day <= 7:
+            ci_factor = 8.0 - (sim_day - 1) / 6 * (8.0 - 3.0)   # 8x → 3x
+            target_penalty = 0.05
+        elif sim_day <= 30:
+            ci_factor = 3.0 - (sim_day - 8) / 22 * (3.0 - 1.0)   # 3x → 1x
+            target_penalty = 0.05 * (1 - (sim_day - 8) / 22)      # fades out
+        else:
+            ci_factor = 1.0
+            target_penalty = 0.0
+
+        tier_cols = st.columns(3)
+        for i, tier_name in enumerate(["conservative", "balanced", "aggressive"]):
+            real_tier = real_tiers.get(tier_name)
+            if not real_tier:
+                continue
+            real_target = real_tier.get("target", 99.0)
+            real_ci = real_tier.get("confidence_interval") or [real_target - 0.1, real_target + 0.1]
+            real_breach = real_tier.get("estimated_breach_probability", 0.05)
+            real_budget = real_tier.get("error_budget_monthly_minutes")
+
+            sim_target = round(real_target - target_penalty, 3)
+            ci_half = (real_ci[1] - real_ci[0]) / 2 * ci_factor
+            sim_ci = [
+                round(max(sim_target - ci_half, 0), 3),
+                round(min(sim_target + ci_half, 100), 3),
+            ]
+            breach_scale = 1 + (ci_factor - 1) * 0.5
+            sim_breach = min(real_breach * breach_scale, 0.95)
+            sim_budget = round(real_budget * (sim_target / real_target), 1) if real_budget else None
+
+            sim_tier_data = {
+                "level": tier_name,
+                "target": sim_target,
+                "confidence_interval": sim_ci,
+                "estimated_breach_probability": sim_breach,
+                "error_budget_monthly_minutes": sim_budget,
+            }
+            with tier_cols[i]:
+                _render_tier_card(sim_tier_data, "availability")
+
+    # --- Phase timeline strip ---
+    st.markdown("---")
+    phases_meta = [
+        ("Pre-Deploy", "blue",   "Day 0"),
+        ("Cold Start", "orange", "Day 1-7"),
+        ("Warming",    "yellow", "Day 8-30"),
+        ("Mature",     "green",  "Day 31+"),
+    ]
+    timeline_cols = st.columns(4)
+    for col, (p_name, p_color, p_range) in zip(timeline_cols, phases_meta):
+        with col:
+            active = p_name == phase
+            label = f"**:{p_color}[{p_name}]**" if active else f":{p_color}[{p_name}]"
+            st.markdown(label)
+            st.caption(p_range)
+            if active:
+                st.caption("↑ You are here")
+
+
 def render_step_3():
     st.header("Step 3: SLO Recommendations")
     st.caption("GET /api/v1/services/{service_id}/slo-recommendations")
@@ -611,76 +759,85 @@ def render_step_3():
         client = get_client()
         with st.spinner("Generating recommendations..."):
             resp = client.get_recommendations(service_id, sli_type, lookback)
-
         if resp:
             st.session_state.step_3_completed = True
             st.session_state.step_3_response = resp
 
-            for rec in resp.get("recommendations", []):
-                rec_sli = rec.get("sli_type", "unknown")
-                st.subheader(f"{rec_sli.title()} Recommendation")
+    resp = st.session_state.get("step_3_response")
+    if resp:
+        for rec in resp.get("recommendations", []):
+            rec_sli = rec.get("sli_type", "unknown")
+            st.subheader(f"{rec_sli.title()} Recommendation")
 
-                tiers = rec.get("tiers", {})
-                tier_cols = st.columns(3)
-                for i, tier_name in enumerate(["conservative", "balanced", "aggressive"]):
-                    tier_data = tiers.get(tier_name, {})
-                    if tier_data:
-                        with tier_cols[i]:
-                            _render_tier_card(tier_data, rec_sli)
+            tiers = rec.get("tiers", {})
+            tier_cols = st.columns(3)
+            for i, tier_name in enumerate(["conservative", "balanced", "aggressive"]):
+                tier_data = tiers.get(tier_name, {})
+                if tier_data:
+                    with tier_cols[i]:
+                        _render_tier_card(tier_data, rec_sli)
 
-                explanation = rec.get("explanation", {})
-                if explanation:
-                    with st.expander("Explanation"):
-                        st.write(explanation.get("summary", ""))
+            explanation = rec.get("explanation", {})
+            if explanation:
+                with st.expander("Explanation"):
+                    st.write(explanation.get("summary", ""))
 
-                        attrs = explanation.get("feature_attribution", [])
-                        if attrs:
-                            st.caption("Feature Attribution")
-                            for attr in attrs:
-                                feat = attr.get("feature", "")
-                                contrib = attr.get("contribution", 0)
-                                desc = attr.get("description", "")
-                                st.progress(min(contrib, 1.0), text=f"{feat}: {contrib:.0%} - {desc}")
+                    attrs = explanation.get("feature_attribution", [])
+                    if attrs:
+                        st.caption("Feature Attribution")
+                        for attr in attrs:
+                            feat = attr.get("feature", "")
+                            contrib = attr.get("contribution", 0)
+                            desc = attr.get("description", "")
+                            st.progress(min(contrib, 1.0), text=f"{feat}: {contrib:.0%} - {desc}")
 
-                        dep_impact = explanation.get("dependency_impact")
-                        if dep_impact:
-                            st.caption("Dependency Impact")
-                            di1, di2 = st.columns(2)
-                            di1.metric("Composite Bound", f"{dep_impact.get('composite_availability_bound', 'N/A')}%")
-                            bottleneck = dep_impact.get("bottleneck_service", "None")
-                            di2.metric("Bottleneck", bottleneck)
+                    dep_impact = explanation.get("dependency_impact")
+                    if dep_impact:
+                        st.caption("Dependency Impact")
+                        di1, di2 = st.columns(2)
+                        di1.metric("Composite Bound", f"{dep_impact.get('composite_availability_bound', 'N/A')}%")
+                        bottleneck = dep_impact.get("bottleneck_service", "None")
+                        di2.metric("Bottleneck", bottleneck)
 
-                    counterfactuals = explanation.get("counterfactuals", [])
-                    if counterfactuals:
-                        with st.expander("Counterfactual Explanations"):
-                            st.info("What-if scenarios showing how changes affect recommendations")
-                            for cf in counterfactuals:
-                                st.markdown(f"**If** {cf.get('condition', '')}")
-                                st.markdown(f"**Then** {cf.get('result', '')}")
-                                st.divider()
+                counterfactuals = explanation.get("counterfactuals", [])
+                if counterfactuals:
+                    with st.expander("Counterfactual Explanations"):
+                        st.info("What-if scenarios showing how changes affect recommendations")
+                        for cf in counterfactuals:
+                            st.markdown(f"**If** {cf.get('condition', '')}")
+                            st.markdown(f"**Then** {cf.get('result', '')}")
+                            st.divider()
 
-                    provenance = explanation.get("provenance")
-                    if provenance:
-                        with st.expander("Data Provenance"):
-                            prov_df = pd.DataFrame([
-                                {"Field": k, "Value": str(v)}
-                                for k, v in provenance.items()
-                            ])
-                            st.dataframe(prov_df, use_container_width=True, hide_index=True)
+                provenance = explanation.get("provenance")
+                if provenance:
+                    with st.expander("Data Provenance"):
+                        prov_df = pd.DataFrame([
+                            {"Field": k, "Value": str(v)}
+                            for k, v in provenance.items()
+                        ])
+                        st.dataframe(prov_df, use_container_width=True, hide_index=True)
 
-                dq = rec.get("data_quality", {})
-                if dq:
-                    with st.expander("Data Quality"):
-                        completeness = dq.get("data_completeness", 0)
-                        st.progress(min(completeness, 1.0), text=f"Completeness: {completeness:.0%}")
-                        if dq.get("confidence_note"):
-                            st.caption(dq["confidence_note"])
-                        if dq.get("is_cold_start"):
-                            st.warning("Cold start: limited historical data available.")
+            dq = rec.get("data_quality", {})
+            if dq:
+                if dq.get("is_cold_start"):
+                    lookback_actual = dq.get("lookback_days_actual", "?")
+                    st.warning(
+                        f"Cold Start Detected: Only {lookback_actual} days of telemetry available. "
+                        "See the simulation below for the full maturity timeline."
+                    )
+                with st.expander("Data Quality"):
+                    completeness = dq.get("data_completeness", 0)
+                    st.progress(min(completeness, 1.0), text=f"Completeness: {completeness:.0%}")
+                    if dq.get("confidence_note"):
+                        st.caption(dq["confidence_note"])
+                    st.caption(f"Actual lookback window used: {dq.get('lookback_days_actual')} days")
 
-                st.divider()
+            st.divider()
 
-            json_expander("Raw JSON Response", resp)
+        _render_cold_start_simulation(resp)
+
+        st.divider()
+        json_expander("Raw JSON Response", resp)
 
 
 def render_step_4():
