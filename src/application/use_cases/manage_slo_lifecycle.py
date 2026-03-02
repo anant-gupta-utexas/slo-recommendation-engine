@@ -213,9 +213,9 @@ class ManageSloLifecycleUseCase:
         In production, these would come from the actual recommendation.
         """
         tier_defaults = {
-            "conservative": {"availability": 99.5, "latency_p95_ms": 300, "latency_p99_ms": 1200},
-            "balanced": {"availability": 99.9, "latency_p95_ms": 200, "latency_p99_ms": 800},
-            "aggressive": {"availability": 99.95, "latency_p95_ms": 150, "latency_p99_ms": 500},
+            "conservative": {"availability": 99.9, "latency_p95_ms": 300, "latency_p99_ms": 500},
+            "balanced": {"availability": 99.95, "latency_p95_ms": 120, "latency_p99_ms": 200},
+            "aggressive": {"availability": 99.99, "latency_p95_ms": 60, "latency_p99_ms": 100},
         }
         return tier_defaults.get(tier, tier_defaults["balanced"]).copy()
 
