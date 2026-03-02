@@ -1,7 +1,7 @@
 # System Design Document (SDD) — SLO Recommendation Engine
 
-> **Version:** 1.0
-> **Date:** 2026-02-14
+> **Version:** 2.0
+> **Date:** 2026-03-02
 > **Status:** Draft
 > **References:** [PRD](../1_product/PRD.md) | [TRD](./TRD.md)
 
@@ -27,8 +27,8 @@ In cloud-native organizations at scale, SLO setting is manual, error-prone, and 
 | Challenge | Architectural Implication |
 |-----------|--------------------------|
 | Dependency-aware computation | Graph storage with efficient traversal (recursive CTEs, cycle detection) |
-| Composite reliability math | Serial/parallel availability formulas + end-to-end trace-based latency measurement |
-| Explainability requirement | SHAP-based feature attribution, counterfactual analysis from day one |
+| Composite reliability math | Serial/parallel availability formulas + percentile-based latency with noise margins |
+| Explainability requirement | Weighted feature attribution, counterfactual analysis, data provenance tracking |
 | Semi-automated governance | Full audit trail, human-on-the-loop approval workflow, graduation path to automation |
 | Scale (5,000+ services) | Pre-computed aggregates, caching, async background processing |
 | Integration with existing stack | Query Prometheus/Mimir — do not duplicate telemetry data |
@@ -51,7 +51,6 @@ C4Context
     System(slo_engine, "SLO Recommendation Engine", "Analyzes telemetry and dependencies to recommend availability and latency SLOs")
 
     System_Ext(prometheus, "Prometheus / Mimir", "Time-series metric store (PromQL API)")
-    System_Ext(tempo, "Grafana Tempo", "Distributed trace store (TraceQL API)")
     System_Ext(otel, "OTel Collector", "Publishes service graph and span metrics to Prometheus")
     System_Ext(k8s, "Kubernetes API", "Service discovery, deployment metadata")
     System_Ext(backstage, "Backstage Developer Platform", "Developer-facing UI consuming the SLO Engine API")
@@ -61,7 +60,6 @@ C4Context
     Rel(dev, backstage, "Views recommendations")
     Rel(backstage, slo_engine, "REST API (JSON)", "API Key auth")
     Rel(slo_engine, prometheus, "PromQL queries", "HTTP/Bearer")
-    Rel(slo_engine, tempo, "TraceQL queries", "HTTP/Bearer")
     Rel(slo_engine, k8s, "Service/Deployment reads", "ServiceAccount")
     Rel(otel, prometheus, "Span metrics, service graph metrics")
     Rel(slo_engine, idp, "JWKS validation", "HTTPS")
@@ -69,12 +67,12 @@ C4Context
 
 ### Architectural Style
 
-The system is a **modular monolith** deployed as two Kubernetes workloads:
+The system is a **modular monolith** deployed as a single Kubernetes workload with an in-process background scheduler:
 
-1. **API Server** — FastAPI application serving the REST API (synchronous request handling)
-2. **Background Worker** — Celery workers executing async tasks (batch aggregation, drift detection, graph analysis)
+1. **API Server** — FastAPI application serving the REST API (async request handling)
+2. **Background Scheduler** — APScheduler running in-process for periodic tasks (batch aggregation, stale edge detection, OTel graph ingestion)
 
-Both share the same codebase and domain logic. This avoids premature microservice decomposition while maintaining clear separation of concerns through Clean Architecture layers.
+Both share the same codebase and domain logic. This avoids premature microservice decomposition while maintaining clear separation of concerns through Clean Architecture layers. Migration to Celery with dedicated worker pods is planned when task volume exceeds 100 tasks/minute.
 
 ### Core Design Principle: Query, Don't Store
 
@@ -93,7 +91,6 @@ The single most important architectural decision is that the SLO Engine **querie
 graph TD
     subgraph External["External Systems"]
         PROM[("Prometheus / Mimir")]
-        TEMPO[("Grafana Tempo")]
         K8S["Kubernetes API"]
         IDP["Identity Provider"]
         BACKSTAGE["Backstage"]
@@ -109,16 +106,18 @@ graph TD
         subgraph APP_LAYER["Application Layer (Use Cases)"]
             UC_INGEST["IngestDependencyGraph"]
             UC_RECOMMEND["GenerateRecommendation"]
+            UC_CONSTRAINT["RunConstraintAnalysis"]
             UC_IMPACT["RunImpactAnalysis"]
-            UC_LIFECYCLE["ManageRecommendationLifecycle"]
-            UC_DASHBOARD["GetDashboardMetrics"]
+            UC_LIFECYCLE["ManageSloLifecycle"]
+            UC_BUDGET["GetErrorBudgetBreakdown"]
         end
 
         subgraph DOMAIN["Domain Layer"]
             DEP_GRAPH["DependencyGraph<br/>Entity"]
-            SLO_CALC["SLO Calculator<br/>(Composite Math)"]
-            EXPLAIN["Explainability<br/>Engine (SHAP)"]
-            DRIFT["Drift Detection<br/>Ensemble"]
+            SLO_CALC["Availability &<br/>Latency Calculators"]
+            COMPOSITE["Composite Availability<br/>Service"]
+            EXPLAIN["Explainability<br/>(Attribution +<br/>Counterfactuals)"]
+            CONSTRAINT["Constraint<br/>Propagation"]
             COLD["Cold-Start<br/>Strategy"]
         end
 
@@ -126,26 +125,27 @@ graph TD
             PG[("PostgreSQL")]
             REDIS[("Redis")]
             PROM_CLIENT["Prometheus<br/>Query Client"]
-            TEMPO_CLIENT["Tempo<br/>Query Client"]
             K8S_CLIENT["Kubernetes<br/>Client"]
-            CELERY["Celery Workers"]
+            SCHEDULER["APScheduler<br/>(Background Tasks)"]
         end
     end
 
     BACKSTAGE -->|REST/JSON| AUTH
     AUTH --> RATE --> ROUTES
-    ROUTES --> UC_INGEST & UC_RECOMMEND & UC_IMPACT & UC_LIFECYCLE & UC_DASHBOARD
+    ROUTES --> UC_INGEST & UC_RECOMMEND & UC_CONSTRAINT & UC_IMPACT & UC_LIFECYCLE & UC_BUDGET
     UC_INGEST --> DEP_GRAPH
-    UC_RECOMMEND --> SLO_CALC & EXPLAIN & COLD
-    UC_IMPACT --> SLO_CALC & DEP_GRAPH
+    UC_RECOMMEND --> SLO_CALC & COMPOSITE & EXPLAIN & COLD
+    UC_CONSTRAINT --> COMPOSITE & CONSTRAINT
+    UC_IMPACT --> COMPOSITE & DEP_GRAPH
     UC_LIFECYCLE --> DEP_GRAPH
+    UC_BUDGET --> CONSTRAINT
     DEP_GRAPH --> PG
-    SLO_CALC --> PROM_CLIENT & TEMPO_CLIENT
+    SLO_CALC --> PROM_CLIENT
+    COMPOSITE --> PROM_CLIENT
     PROM_CLIENT --> PROM
-    TEMPO_CLIENT --> TEMPO
     K8S_CLIENT --> K8S
-    CELERY --> DRIFT & DEP_GRAPH & SLO_CALC
-    CELERY --> REDIS
+    SCHEDULER --> DEP_GRAPH & SLO_CALC
+    SCHEDULER --> REDIS
     AUTH --> IDP
     RATE --> REDIS
 ```
@@ -155,19 +155,24 @@ graph TD
 | Component | Responsibility | Layer |
 |-----------|---------------|-------|
 | **Auth Middleware** | Validates API keys (bcrypt-hashed) and JWT tokens (OIDC/JWKS). Enforces RBAC (sre_admin, service_owner, viewer). | Infrastructure |
-| **Rate Limiter** | Token-bucket rate limiting per client, backed by Redis for distributed consistency. | Infrastructure |
+| **Rate Limiter** | Token-bucket rate limiting per client/endpoint. In-memory for MVP; Redis-backed planned for multi-replica. | Infrastructure |
 | **API Routes** | FastAPI route handlers. Input validation via Pydantic. OpenAPI 3.0 auto-generation. RFC 7807 error responses. | Infrastructure |
-| **IngestDependencyGraph** | Validates, merges, and upserts dependency graph from multiple sources. Triggers Tarjan's SCC detection. | Application |
-| **GenerateRecommendation** | Orchestrates the full recommendation pipeline: fetch SLI data → retrieve subgraph → compute composite bounds → calculate tiers → generate explanations. | Application |
-| **RunImpactAnalysis** | Reverse-traverses the graph to identify upstream services affected by a proposed SLO change. | Application |
-| **ManageRecommendationLifecycle** | Handles accept/modify/reject workflow. Writes to audit log. Updates active SLOs. | Application |
-| **DependencyGraph Entity** | Domain model for the service graph. Encodes nodes, edges, edge annotations, SCC supernodes. Implements graph traversal logic. | Domain |
-| **SLO Calculator** | Pure domain logic for composite availability (serial/parallel), latency tier computation, confidence intervals via bootstrap resampling. | Domain |
-| **Explainability Engine** | SHAP-based feature attribution, counterfactual analysis, natural-language summary generation. | Domain |
-| **Drift Detection Ensemble** | Page-Hinkley + ADWIN + KS-test with majority voting. Triggers SLO re-evaluation on confirmed drift. | Domain |
-| **Cold-Start Strategy** | Archetype matching for services with <30 days of data. Extends lookback windows. Flags low confidence. | Domain |
-| **Prometheus Query Client** | PromQL query builder. Circuit-breaker wrapped (10 failures → 30s open). Exponential backoff retries. | Infrastructure |
-| **Celery Workers** | Executes background tasks: hourly SLI aggregation, 15-min drift detection, post-ingestion graph analysis. | Infrastructure |
+| **IngestDependencyGraph** | Validates, merges, and upserts dependency graph from multiple sources (manual, OTel, K8s). Auto-creates discovered services. Triggers Tarjan's SCC detection. | Application |
+| **GenerateRecommendation** | Orchestrates the full recommendation pipeline: validate service → check cold-start → fetch SLI data → retrieve subgraph → compute composite bounds → calculate tiers → generate attributions & counterfactuals → supersede old recommendations. | Application |
+| **RunConstraintAnalysis** | Classifies dependencies (hard/soft, internal/external), resolves external availabilities with adaptive buffer, computes composite bound, error budget breakdown, unachievability detection, and cycle identification. | Application |
+| **RunImpactAnalysis** | Reverse-traverses the graph to identify upstream services affected by a proposed SLO change. Recomputes composite bounds with proposed vs. current targets. | Application |
+| **ManageSloLifecycle** | Handles accept/modify/reject workflow. Writes to append-only audit log. Upserts active SLOs. | Application |
+| **GetErrorBudgetBreakdown** | Returns per-dependency error budget consumption with risk classification. | Application |
+| **DependencyGraph Entity** | Domain model for the service graph. Encodes nodes, edges with annotations (communication_mode, criticality, discovery_source, confidence_score, staleness). | Domain |
+| **Availability Calculator** | Percentile-based availability tier computation (p0.1/p1/p5), breach probability estimation, bootstrap confidence intervals (1000 resamples), error budget in monthly minutes. | Domain |
+| **Latency Calculator** | Percentile-based latency tier computation (p999/p99/p95) with noise margins (5% default, 10% shared infrastructure). Bootstrap confidence intervals. | Domain |
+| **Composite Availability Service** | Serial (R = R_self × R_dep1 × R_dep2) and parallel (R = 1-(1-R1)(1-R2)) composite math. Bottleneck identification. Soft dependencies excluded from bound. | Domain |
+| **Explainability Engine** | Weighted feature attribution (heuristic MVP weights, SHAP planned Phase 5), counterfactual "what-if" analysis via perturbation of top-3 contributing features, data provenance metadata. | Domain |
+| **Constraint Propagation** | External API adaptive buffer service (10x pessimistic margin), unachievable SLO detector (10x rule), error budget analyzer (per-dependency risk: LOW/MODERATE/HIGH). | Domain |
+| **Cold-Start Strategy** | Detects data completeness < 90% over 30-day window. Auto-extends lookback to 90 days. Flags low confidence in data quality. | Domain |
+| **Circular Dependency Detector** | Iterative Tarjan's algorithm for finding strongly connected components. O(V+E) complexity. Non-blocking (stored as alerts). | Domain |
+| **Prometheus Query Client** | PromQL query builder against Prometheus/Mimir remote read API. | Infrastructure |
+| **APScheduler** | In-process background scheduler: periodic OTel graph ingestion (15 min), stale edge detection (168h threshold), batch recommendation computation (24h). | Infrastructure |
 
 ---
 
@@ -180,10 +185,12 @@ erDiagram
     SERVICES {
         uuid id PK
         varchar service_id UK "business identifier"
+        enum service_type "internal|external"
         jsonb metadata
         enum criticality "critical|high|medium|low"
         varchar team
         boolean discovered
+        decimal published_sla "external only"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -208,7 +215,7 @@ erDiagram
         uuid service_id FK
         enum sli_type "availability|latency"
         jsonb tiers "conservative/balanced/aggressive"
-        jsonb explanation "SHAP, counterfactuals"
+        jsonb explanation "attributions, counterfactuals"
         jsonb data_quality
         timestamptz generated_at
         timestamptz expires_at
@@ -256,12 +263,13 @@ erDiagram
         enum status "open|acknowledged|resolved"
     }
 
-    AUTO_APPROVAL_RULES {
+    API_KEYS {
         uuid id PK
         varchar name
-        jsonb conditions
-        boolean enabled
-        varchar created_by
+        varchar key_hash "bcrypt"
+        varchar role "sre_admin|service_owner|viewer"
+        boolean is_active
+        timestamptz created_at
     }
 
     SERVICES ||--o{ SERVICE_DEPENDENCIES : "source"
@@ -280,14 +288,13 @@ erDiagram
 flowchart LR
     subgraph SOURCES["Data Sources"]
         PROM_SRC[("Prometheus<br/>/ Mimir")]
-        TEMPO_SRC[("Grafana<br/>Tempo")]
         K8S_SRC["Kubernetes<br/>API"]
         OTEL_SRC["OTel Service<br/>Graph Connector"]
         MANUAL["Manual API<br/>Submission"]
     end
 
     subgraph INGESTION["Ingestion & Aggregation"]
-        BATCH["Hourly Batch<br/>Aggregation Job"]
+        BATCH["Batch<br/>Aggregation Job"]
         GRAPH_INGEST["Dependency Graph<br/>Ingestion"]
     end
 
@@ -303,9 +310,10 @@ flowchart LR
     subgraph COMPUTE["Recommendation Compute"]
         GRAPH_TRAVERSE["Graph Traversal<br/>(Recursive CTE)"]
         COMPOSITE["Composite<br/>Availability Math"]
-        LATENCY["End-to-End<br/>Latency Analysis"]
-        TIERS["Tier Calculation<br/>(Conservative/<br/>Balanced/Aggressive)"]
-        SHAP_ENG["SHAP Feature<br/>Attribution"]
+        LATENCY["Latency Tier<br/>Computation"]
+        TIERS["Availability Tier<br/>Calculation<br/>(Conservative/<br/>Balanced/Aggressive)"]
+        ATTR_ENG["Feature<br/>Attribution"]
+        CONSTRAINT_ENG["Constraint<br/>Propagation"]
     end
 
     subgraph DELIVERY["API Delivery"]
@@ -314,12 +322,10 @@ flowchart LR
     end
 
     subgraph CONTINUOUS["Continuous Monitoring"]
-        DRIFT_DET["Drift Detection<br/>Ensemble"]
         STALE_CHECK["Staleness<br/>Checker"]
     end
 
     PROM_SRC -->|PromQL| BATCH
-    TEMPO_SRC -->|TraceQL| LATENCY
     K8S_SRC --> GRAPH_INGEST
     OTEL_SRC --> GRAPH_INGEST
     MANUAL --> GRAPH_INGEST
@@ -333,17 +339,18 @@ flowchart LR
 
     COMPOSITE --> TIERS
     LATENCY --> TIERS
-    TIERS --> SHAP_ENG
-    SHAP_ENG --> PG_RECS
+    TIERS --> ATTR_ENG
+    ATTR_ENG --> PG_RECS
     PG_RECS --> REDIS_CACHE
+
+    COMPOSITE --> CONSTRAINT_ENG
+    CONSTRAINT_ENG --> REST_API
 
     REDIS_CACHE --> REST_API
     REST_API --> BACKSTAGE_INT
 
     REST_API -->|accept/modify/reject| PG_SLOS & PG_AUDIT
 
-    PG_AGG --> DRIFT_DET
-    DRIFT_DET -->|stale flag| PG_RECS
     PG_GRAPH --> STALE_CHECK
     STALE_CHECK -->|re-evaluate| COMPOSITE
 ```
@@ -352,10 +359,9 @@ flowchart LR
 
 | Store | Technology | Purpose | Rationale |
 |-------|-----------|---------|-----------|
-| **Primary Database** | PostgreSQL 16+ | Graph storage, SLO data, audit logs, SLI aggregates | Recursive CTEs for graph traversal. JSONB for flexible metadata. Proven at scale. Partitioning support for large tables. |
-| **Cache & Rate Limiting** | Redis 7+ | Recommendation cache (24h TTL), rate limit counters, Celery broker, distributed locks | Sub-millisecond reads for cached recommendations. Token bucket implementation. |
+| **Primary Database** | PostgreSQL 16+ | Graph storage, SLO data, audit logs, SLI aggregates | Recursive CTEs for graph traversal. JSONB for flexible metadata. Partitioning support. |
+| **Cache & Rate Limiting** | Redis 7+ | Recommendation cache (24h TTL), rate limit counters, distributed locks | Sub-millisecond reads for cached recommendations. |
 | **Time-Series Metrics** | Prometheus / Mimir (external) | Historical SLI data, infrastructure metrics | **Queried, not owned.** Avoids data duplication. Leverages existing retention policies. |
-| **Trace Storage** | Grafana Tempo (external) | End-to-end latency distributions | **Queried, not owned.** Used on-demand for latency SLO computation. |
 
 **Partitioning:** `sli_aggregates` is partitioned by `computed_at` (monthly partitions). Hourly granularity retained for 90 days; daily aggregates retained for 1 year.
 
@@ -363,7 +369,167 @@ flowchart LR
 
 ---
 
-## 5. API Design Strategy
+## 5. SLO Recommendation Algorithm
+
+This section describes the core computation pipeline that powers the engine.
+
+### 5.1 Availability Tier Computation
+
+The engine generates **three recommendation tiers** using percentile analysis of historical rolling availability windows, capped by composite dependency bounds:
+
+| Tier | Percentile | Composite Cap | Intent |
+|------|-----------|---------------|--------|
+| **Conservative** | p0.1 (floor) | Capped by composite bound | Easiest to meet; safe default |
+| **Balanced** | p1 | Capped by composite bound | Moderate ambition |
+| **Aggressive** | p5 | NOT capped | Aspirational; may require dependency improvements |
+
+**Each tier includes:**
+- **Target**: Availability percentage (e.g., 99.95%)
+- **Error Budget**: Monthly minutes of allowed downtime = `(100% - target%) × 43,200 minutes`
+- **Breach Probability**: Fraction of historical windows where target would have been breached
+- **95% Confidence Interval**: Computed via bootstrap resampling (1,000 resamples)
+
+**Why p0.1/p1/p5 (not p50/p90/p99)?** We're selecting from the *lower tail* of availability distributions. p0.1 represents a floor nearly all historical windows exceeded, while p5 represents a target only 95% of windows met — genuinely ambitious.
+
+### 5.2 Latency Tier Computation
+
+Latency tiers use historical percentile data with noise margins to account for infrastructure variability:
+
+| Tier | Percentile | Noise Margin |
+|------|-----------|-------------|
+| **Conservative** | p999 | +10% (shared infra) or +5% (default) |
+| **Balanced** | p99 | +10% or +5% |
+| **Aggressive** | p95 | +10% or +5% |
+
+The noise margin accounts for CFS throttling, noisy neighbors, and shared infrastructure effects that cause latency variance beyond application-level behavior.
+
+### 5.3 Composite Availability Bound
+
+The composite bound represents the **maximum achievable availability** given a service's dependency chain:
+
+```
+Serial (hard sync deps):    R_composite = R_self × R_dep1 × R_dep2 × ... × R_depN
+Parallel (redundant paths): R_group = 1 - (1-R_primary)(1-R_fallback)
+Mixed topology:             Apply parallel within groups, then serial across groups
+```
+
+**Key behaviors:**
+- **Hard dependencies** (sync, criticality=hard): Included in composite math
+- **Soft dependencies** (async, criticality=soft/degraded): Excluded from bound, noted as risk
+- **Bottleneck identification**: The dependency with the lowest individual availability is flagged
+
+**Example:** `checkout-service` (99.95%) → depends on `payment-service` (99.9%) and `inventory-service` (99.8%)
+- Composite bound = 0.9995 × 0.999 × 0.998 = **99.65%**
+- Bottleneck: `inventory-service` at 99.8%
+
+### 5.4 Constraint Propagation (FR-3)
+
+Constraint propagation answers: *"Given my dependency chain, is my desired SLO even achievable?"*
+
+#### External API Adaptive Buffer
+
+External dependencies (e.g., `external-payment-api`) receive a pessimistic adjustment because published SLAs are often overstated:
+
+```
+published_adjusted = 1 - (1 - published_sla) × 11    # 10x unavailability margin
+
+effective = min(observed, published_adjusted)          # if both available
+effective = observed                                    # if only observed
+effective = published_adjusted                          # if only published
+effective = 0.999                                       # if neither (conservative default)
+```
+
+**Example:** Stripe publishes 99.99% SLA → adjusted = 1 - (0.0001 × 11) = **99.89%**. If observed is 99.85%, effective = **99.85%** (the worse of the two).
+
+#### Error Budget Breakdown
+
+For each dependency, the engine computes what fraction of the parent service's error budget it consumes:
+
+```
+consumption_pct = (1 - dep_availability) / (1 - slo_target) × 100
+```
+
+Risk classification:
+- **LOW** (green): < 20% of error budget consumed
+- **MODERATE** (yellow): 20-30% consumed
+- **HIGH** (red): > 30% consumed — triggers alert
+
+#### Unachievable SLO Detection
+
+Uses the **10x rule**: each component (service + N dependencies) gets an equal share of the error budget:
+
+```
+required_dep_availability = 1 - error_budget / (N + 1)
+```
+
+If the composite bound falls below the desired target, the engine generates:
+1. A **warning message** with the gap (e.g., "99.99% desired but only 99.65% achievable")
+2. **Remediation guidance**: add redundant paths, convert sync→async, or relax the target
+
+### 5.5 Impact Analysis (FR-4)
+
+Impact analysis answers: *"If I change this service's SLO, which upstream services are affected?"*
+
+**Algorithm:**
+1. Reverse-traverse the dependency graph to find all upstream consumers
+2. For each upstream service, recompute composite availability with the **proposed** target substituted
+3. Compare against the upstream service's own active SLO target
+4. Flag services where projected composite drops below their SLO target as "at risk"
+5. Sort results by absolute delta (most impacted first)
+
+**Latency caveat:** Percentiles are non-additive (p99 of sum ≠ sum of p99s), so latency impact is flagged as requiring manual review rather than being computed mathematically.
+
+### 5.6 Explainability (FR-7)
+
+Every recommendation includes three explainability components:
+
+#### Feature Attribution
+
+MVP uses weighted heuristic attribution (SHAP values planned for Phase 5):
+
+| Feature (Availability) | Weight | Description |
+|------------------------|--------|-------------|
+| `historical_availability_mean` | 0.40 | Primary driver — observed reliability |
+| `downstream_dependency_risk` | 0.30 | Composite bound constraint |
+| `external_api_reliability` | 0.15 | External dependency risk |
+| `deployment_frequency` | 0.15 | Stability signal |
+
+| Feature (Latency) | Weight | Description |
+|-------------------|--------|-------------|
+| `p99_latency_historical` | 0.50 | Primary driver — observed tail latency |
+| `call_chain_depth` | 0.22 | Cascading delay from depth |
+| `noisy_neighbor_margin` | 0.15 | Infrastructure noise |
+| `traffic_seasonality` | 0.13 | Load pattern variability |
+
+Contributions are normalized to sum to 1.0 and sorted by absolute contribution.
+
+#### Counterfactual Analysis
+
+Generates up to 3 "what-if" statements by perturbing the top contributing features:
+
+> *"If historical availability improved by 0.5%, recommended target would increase to 99.97%"*
+> *"If downstream dependency risk reduced by 0.5%, recommended target would increase to 99.96%"*
+
+#### Data Provenance
+
+Each recommendation records:
+- Dependency graph version (timestamp of snapshot used)
+- Telemetry window (start/end)
+- Data completeness score (0.0-1.0)
+- Computation method (e.g., `composite_reliability_math_v1`)
+- Telemetry source
+
+### 5.7 Cold-Start Strategy
+
+For new services with insufficient historical data:
+
+1. **Detection**: Data completeness < 90% over the default 30-day lookback window
+2. **Mitigation**: Auto-extend lookback to 90 days to gather more data
+3. **Flagging**: Mark recommendation with low confidence in data quality metadata
+
+---
+
+## 6. API Design
 
 ### Interaction Pattern
 
@@ -378,13 +544,25 @@ flowchart LR
 
 | Method | Endpoint | Description | Latency Target |
 |--------|----------|-------------|----------------|
-| POST | `/api/v1/services/dependencies` | Bulk upsert dependency graph | < 30s (async, 202 Accepted) |
+| POST | `/api/v1/services/dependencies` | Bulk upsert dependency graph | < 30s |
 | GET | `/api/v1/services/{id}/dependencies` | Get dependency subgraph | < 500ms |
 | GET | `/api/v1/services/{id}/slo-recommendations` | Get SLO recommendations | < 500ms (cached), < 5s (regenerate) |
-| POST | `/api/v1/services/{id}/slos` | Accept/modify/reject | < 500ms |
-| POST | `/api/v1/slos/impact-analysis` | Run impact analysis | < 10s |
+| POST | `/api/v1/services/{id}/constraint-analysis` | Run constraint propagation analysis | < 5s |
+| GET | `/api/v1/services/{id}/error-budget-breakdown` | Get per-dependency error budget breakdown | < 500ms |
+| POST | `/api/v1/services/{id}/impact-analysis` | Run cascading impact analysis | < 10s |
+| POST | `/api/v1/services/{id}/slo/accept` | Accept a recommendation tier | < 500ms |
+| POST | `/api/v1/services/{id}/slo/modify` | Modify and accept with custom targets | < 500ms |
+| POST | `/api/v1/services/{id}/slo/reject` | Reject a recommendation | < 500ms |
+| GET | `/api/v1/services/{id}/slo/audit-history` | View SLO change audit trail | < 500ms |
 | GET | `/api/v1/health` | Liveness check | < 50ms |
-| GET | `/api/v1/health/ready` | Readiness check | < 200ms |
+| GET | `/api/v1/health/ready` | Readiness check (DB + Redis) | < 200ms |
+
+**Key query parameters:**
+- `sli_type`: `availability`, `latency`, or `all` (default)
+- `lookback_days`: 7-365 (default 30)
+- `force_regenerate`: boolean — bypass cache and recompute
+- `max_depth`: 1-10 for subgraph traversal (default 3)
+- `direction`: `upstream`, `downstream`, or `both`
 
 ### Critical Flow: SLO Recommendation Generation
 
@@ -396,37 +574,31 @@ sequenceDiagram
     participant Cache as Redis Cache
     participant DB as PostgreSQL
     participant Prom as Prometheus/Mimir
-    participant Tempo as Grafana Tempo
 
     SRE->>Backstage: View SLO recommendations for checkout-service
     Backstage->>API: GET /api/v1/services/checkout-service/slo-recommendations
-    API->>API: Validate JWT, check RBAC
+    API->>API: Validate API key, check RBAC
 
     API->>Cache: Check cached recommendation
     alt Cache Hit (< 24h old)
         Cache-->>API: Return cached recommendation
         API-->>Backstage: 200 OK (recommendations JSON)
     else Cache Miss or force_regenerate=true
-        API->>DB: Fetch service metadata + dependency subgraph
-        DB-->>API: Service + edges (depth=3)
+        API->>DB: Fetch service metadata + dependency subgraph (depth=3)
+        DB-->>API: Service + edges
 
-        par Parallel Data Fetch
-            API->>Prom: PromQL — availability SLI (30d rolling)
-            API->>Prom: PromQL — latency histogram percentiles (30d)
-            API->>Prom: PromQL — infrastructure metrics (CFS throttling)
-            API->>Tempo: TraceQL — end-to-end latency distribution
-        end
+        API->>Prom: PromQL — availability SLI + latency percentiles (30d rolling)
+        Prom-->>API: Availability ratio, latency histograms
 
-        Prom-->>API: Availability ratio, latency histograms, infra metrics
-        Tempo-->>API: End-to-end p95/p99 latency
+        Note over API: Cold-start check: if data_completeness < 90%,<br/>re-query with 90-day lookback
 
         API->>API: Compute composite availability (serial × parallel)
-        API->>API: Compute latency tiers + noise margin
-        API->>API: Calculate 3 tiers (Conservative/Balanced/Aggressive)
-        API->>API: Bootstrap resampling → confidence intervals
-        API->>API: SHAP feature attribution
-        API->>API: Counterfactual analysis (what-if ±1 nine)
-        API->>API: Generate natural language summary
+        API->>API: Compute availability tiers (p0.1/p1/p5) capped by composite bound
+        API->>API: Compute latency tiers (p999/p99/p95) + noise margin
+        API->>API: Bootstrap resampling → 95% confidence intervals
+        API->>API: Weighted feature attribution
+        API->>API: Counterfactual analysis (perturb top-3 features)
+        API->>API: Supersede any existing active recommendation
 
         API->>DB: Store recommendation
         API->>Cache: Cache recommendation (TTL=24h)
@@ -445,10 +617,10 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Cache as Redis
 
-    SRE->>API: POST /api/v1/services/checkout-service/slos
-    Note right of SRE: { action: "modify",<br/>selected_tier: "balanced",<br/>modifications: { availability_target: 99.95 },<br/>rationale: "Adding fallback payment provider" }
+    SRE->>API: POST /api/v1/services/checkout-service/slo/modify
+    Note right of SRE: { selected_tier: "balanced",<br/>modifications: { availability_target: 99.95 },<br/>rationale: "Adding fallback payment provider" }
 
-    API->>API: Validate JWT, verify ownership (team match)
+    API->>API: Validate API key, verify ownership (team match)
     API->>DB: Fetch recommendation by recommendation_id
     DB-->>API: Recommendation details
 
@@ -465,73 +637,65 @@ sequenceDiagram
 
 ---
 
-## 6. Technology Stack
+## 7. Technology Stack
 
 | Layer | Technology | Version | Rationale |
 |-------|-----------|---------|-----------|
-| **Language** | Python | 3.12+ | Team expertise. Rich ML/data ecosystem. Async support via asyncio. |
-| **API Framework** | FastAPI | 0.115+ | Async-native, auto-generated OpenAPI docs, Pydantic validation. Chosen over Django REST (heavier) and Flask (less async support). |
-| **ORM** | SQLAlchemy | 2.0+ | Async support, mature PostgreSQL integration, type-safe queries. Chosen over Tortoise ORM (less mature) and raw SQL (less safe). |
-| **Database** | PostgreSQL | 16+ | Recursive CTEs for graph traversal, JSONB for flexible metadata, table partitioning. Chosen over Neo4j (overkill for MVP graph complexity), MongoDB (weaker consistency). |
-| **Cache** | Redis | 7+ | Sub-ms reads, token bucket rate limiting, Celery broker. Chosen over Memcached (less versatile) and in-process cache (not distributed). |
-| **Task Queue** | Celery + Redis broker | 5.3+ | Distributed background jobs: batch aggregation, drift detection, graph analysis. Chosen over APScheduler (not distributed) and Dramatiq (smaller ecosystem). |
-| **ML / Explainability** | scikit-learn, shap, scipy, river | Latest stable | MVP rule-based models + statistical methods. SHAP for explainability. river for streaming drift detection. |
-| **Telemetry Client** | prometheus-api-client | Latest | PromQL queries against Prometheus/Mimir remote read API. |
-| **Migrations** | Alembic | Latest | SQLAlchemy-native schema versioning. All migrations are reversible. |
-| **Containerization** | Docker | Latest | Multi-stage builds (builder + runtime). |
+| **Language** | Python | 3.13+ | Team expertise. Rich ML/data ecosystem. Full async/await support. |
+| **API Framework** | FastAPI | 0.115+ | Async-native, auto-generated OpenAPI docs, Pydantic validation. |
+| **ORM** | SQLAlchemy | 2.0+ | Async support (AsyncPG), mature PostgreSQL integration, type-safe queries. |
+| **Database** | PostgreSQL | 16+ | Recursive CTEs for graph traversal, JSONB for flexible metadata, table partitioning. |
+| **Cache** | Redis | 7+ | Sub-ms reads, health checks, future rate limiting and caching. |
+| **Background Tasks** | APScheduler | 3.10+ | In-process scheduling for MVP. Periodic OTel ingestion (15 min), stale edge detection, batch recommendations (24h). Migration to Celery planned at scale. |
+| **ML / Explainability** | scipy, statistics (stdlib) | Latest stable | Bootstrap resampling, percentile computation. SHAP and scikit-learn deferred to Phase 5. |
+| **Telemetry Client** | prometheus-api-client | Latest | PromQL queries against Prometheus/Mimir. Mock client for demo/testing. |
+| **Migrations** | Alembic | Latest | SQLAlchemy-native schema versioning. All migrations reversible. |
+| **Containerization** | Docker | Latest | Multi-stage builds (base → api). |
 | **Orchestration** | Kubernetes | 1.28+ | Deployment, HPA scaling, health checks, rolling updates. |
-| **CI/CD** | GitHub Actions | N/A | Build, test (pytest + testcontainers), lint (ruff), type-check (mypy --strict), security scan (bandit + pip-audit). |
+| **CI/CD** | GitHub Actions | N/A | Build, test (pytest), lint (ruff), type-check (mypy --strict), security scan (bandit + pip-audit). |
 
 ---
 
-## 7. Scalability & Performance Strategy
+## 8. Dependency Modeling
 
-### Scaling Model
+### Graph Schema
 
-```mermaid
-graph LR
-    subgraph HORIZONTAL["Horizontal Scaling"]
-        API1["API Pod 1"]
-        API2["API Pod 2"]
-        API3["API Pod 3"]
-        APIX["API Pod N<br/>(HPA: 3→10)"]
-    end
+Services and their dependencies are stored in PostgreSQL with the following edge annotations:
 
-    subgraph WORKERS["Worker Scaling"]
-        W1["Worker Pod 1"]
-        W2["Worker Pod 2"]
-        WX["Worker Pod N<br/>(HPA: 2→8)"]
-    end
+| Annotation | Values | Impact on Computation |
+|-----------|--------|----------------------|
+| **communication_mode** | `sync` / `async` | Async deps excluded from composite availability math |
+| **criticality** | `hard` / `soft` / `degraded` | Only `hard` deps included in composite bound |
+| **discovery_source** | `manual` / `otel` / `k8s` / `mesh` | Multi-source edges merged; confidence based on source count |
+| **confidence_score** | 0.0-1.0 | Higher when confirmed by multiple sources |
+| **is_stale** | boolean | Stale edges (not observed in 168h) excluded from queries |
+| **service_type** | `internal` / `external` | External deps trigger adaptive buffer strategy |
 
-    LB["K8s Ingress /<br/>Load Balancer"] --> API1 & API2 & API3 & APIX
-    REDIS_Q[("Redis<br/>Task Queue")] --> W1 & W2 & WX
-    PG_DB[("PostgreSQL<br/>+ PgBouncer")] --> API1 & API2 & API3 & APIX & W1 & W2 & WX
-```
+### Multi-Source Discovery & Edge Merging
 
-### Performance Strategy
+Dependencies are discovered from multiple sources and merged:
+1. **Manual API submission** — highest authority, team-declared
+2. **OTel Service Graph** — extracted from Prometheus `traces_service_graph_request_total` metric
+3. **Kubernetes API** — service-to-service references from deployment specs
+4. **Service mesh** — (future) sidecar-level dependency maps
 
-| Strategy | Implementation | Target |
-|----------|---------------|--------|
-| **Pre-computed aggregates** | Hourly batch job writes SLI aggregates to PostgreSQL. Recommendations served from cache. | Recommendation retrieval < 500ms (p95) |
-| **Caching** | Redis cache with 24h TTL for recommendations. Invalidated on graph change, drift, or SLO acceptance. | Cache hit rate > 80% |
-| **Async processing** | Dependency graph ingestion returns 202 Accepted. Tarjan's SCC detection runs as background task. Batch aggregation via Celery. | Graph ingestion < 30s (1000 services) |
-| **Efficient graph traversal** | PostgreSQL recursive CTEs with partial indexes (`WHERE NOT is_stale`). Cycle prevention in CTE via path arrays. | 3-hop traversal < 100ms (5000 services) |
-| **Connection pooling** | PgBouncer or SQLAlchemy pool (max 50 connections per instance). | No connection exhaustion under load |
-| **Horizontal scaling** | API pods scale on CPU > 70% or p95 latency > 400ms. Worker pods scale on queue depth > 100. | 200+ concurrent users |
+When the same edge is reported by multiple sources, confidence increases. Divergence between declared (manual) and observed (OTel) graphs triggers alerting.
 
-### Auto-Scaling Triggers
+### Circular Dependency Detection
 
-| Component | Metric | Threshold | Action |
-|-----------|--------|-----------|--------|
-| API pods | CPU utilization | > 70% | HPA: 3 → 10 pods |
-| API pods | p95 response latency | > 400ms | HPA: 3 → 10 pods |
-| Worker pods | Celery queue depth | > 100 tasks | HPA: 2 → 8 pods |
-| PostgreSQL | Connection count | > 80% of max | Add PgBouncer or vertical scale |
-| Redis | Memory usage | > 80% | Vertical scale or Redis Cluster |
+Uses **iterative Tarjan's algorithm** (O(V+E)) to find all strongly connected components (SCCs) with size > 1. Cycles are stored as `CIRCULAR_DEPENDENCY_ALERTS` and surfaced in constraint analysis. The engine does not block on cycles — it detects and reports them as risk factors.
+
+### Graph Traversal
+
+Subgraph retrieval uses PostgreSQL **recursive CTEs** with:
+- Configurable `max_depth` (1-10, default 3)
+- Configurable `direction` (upstream, downstream, both)
+- Partial index on `WHERE NOT is_stale` for performance
+- Cycle prevention via path arrays in the CTE
 
 ---
 
-## 8. Security Architecture
+## 9. Security Architecture
 
 ### Authentication & Authorization Flow
 
@@ -563,28 +727,27 @@ flowchart TD
 | **API Key Storage** | bcrypt (cost factor 12). Raw keys never stored or logged. |
 | **JWT Validation** | Signature verified against IdP JWKS endpoint. Token cache TTL: 5 min. |
 | **Input Validation** | All inputs via Pydantic strict models. Max request body: 10 MB. |
-| **SQL Injection** | SQLAlchemy ORM or parameterized queries only. No raw string interpolation. |
-| **PII Prevention** | Metric label sanitization — reject labels matching PII patterns (email, IP, UUID-like user IDs). |
-| **Audit Immutability** | `slo_audit_log` table: no UPDATE/DELETE grants at the database level. Application ORM enforces append-only. |
-| **Rate Limiting** | Token bucket per client (API key or OAuth2 subject). Redis-backed for distributed consistency. Returns 429 with Retry-After header. |
-| **Secrets Management** | All secrets via environment variables or Kubernetes Secrets. Never in source code or config files. |
+| **SQL Injection** | SQLAlchemy ORM with parameterized queries only. No raw string interpolation. |
+| **Audit Immutability** | `slo_audit_log` table: no UPDATE/DELETE grants at the database level. ORM enforces append-only. |
+| **Rate Limiting** | Token bucket per client/endpoint. Ingestion: 10/min. Query: 60/min. Returns 429 with Retry-After. |
+| **Secrets Management** | All secrets via environment variables or Kubernetes Secrets. Never in source code. |
 
 ---
 
-## 9. Deployment Architecture
+## 10. Deployment Architecture
 
 ### Environment Topology
 
 ```mermaid
 graph TB
     subgraph DEV["Development"]
-        DEV_COMPOSE["Docker Compose<br/>FastAPI + PostgreSQL + Redis"]
-        DEV_MOCK["Mock Prometheus<br/>(recorded responses)"]
+        DEV_COMPOSE["Docker Compose<br/>FastAPI + PostgreSQL + Redis + Prometheus"]
+        DEV_MOCK["Mock Prometheus<br/>(seed data)"]
+        DEV_STREAMLIT["Streamlit Demo<br/>(interactive walkthrough)"]
     end
 
     subgraph STAGING["Staging (Kubernetes)"]
         STG_API["API (2 replicas)"]
-        STG_WORKER["Worker (1 replica)"]
         STG_PG[("PostgreSQL<br/>(copy of prod graph)")]
         STG_REDIS[("Redis")]
         STG_PROM["Staging Prometheus<br/>(synthetic metrics)"]
@@ -593,7 +756,6 @@ graph TB
     subgraph PROD["Production (Kubernetes)"]
         PROD_INGRESS["K8s Ingress<br/>(TLS termination)"]
         PROD_API["API (3+ replicas)<br/>HPA: 3→10"]
-        PROD_WORKER["Worker (2+ replicas)<br/>HPA: 2→8"]
         PROD_PG[("PostgreSQL<br/>(HA: Patroni or managed)")]
         PROD_REDIS[("Redis 7+")]
         PROD_PROM["Production<br/>Prometheus / Mimir"]
@@ -601,8 +763,20 @@ graph TB
 
     PROD_INGRESS --> PROD_API
     PROD_API --> PROD_PG & PROD_REDIS
-    PROD_WORKER --> PROD_PG & PROD_REDIS & PROD_PROM
 ```
+
+### Streamlit Demo
+
+An interactive Streamlit application (`demo/streamlit_demo.py`) provides an 8-step walkthrough of the full system:
+
+1. **Ingest Dependency Graph** — choose from manual, OTel, or Kubernetes demo data
+2. **Query Subgraph** — visualize with NetworkX/Matplotlib, configure depth and direction
+3. **SLO Recommendations** — generate and view 3-tier recommendations with explainability
+4. **Accept SLO** — snapshot a recommended tier to active SLO
+5. **Modify SLO** — adjust targets with custom rationale
+6. **Impact Analysis** — see cascading effects of proposed changes
+7. **Audit History** — review all SLO change events
+8. **Concepts & Reference** — educational walkthrough of core algorithms
 
 ### CI/CD Pipeline
 
@@ -610,14 +784,14 @@ graph TB
 Push to main / PR
     │
     ├─ Stage 1: Validate (parallel)
-    │   ├── ruff (linting)
+    │   ├── ruff (linting + formatting)
     │   ├── mypy --strict (type checking)
     │   └── bandit + pip-audit (security)
     │
     ├─ Stage 2: Test (parallel)
-    │   ├── pytest unit tests (coverage: 90% domain/app)
-    │   ├── pytest integration (testcontainers: PG + Redis)
-    │   └── schemathesis (API contract tests from OpenAPI spec)
+    │   ├── pytest unit tests (147+ tests, ~0.5s)
+    │   ├── pytest integration (80+ tests, testcontainers: PG + Redis)
+    │   └── pytest e2e (20+ tests, full stack)
     │
     ├─ Stage 3: Build
     │   ├── Docker multi-stage build
@@ -625,78 +799,84 @@ Push to main / PR
     │
     ├─ Stage 4: Deploy Staging
     │   ├── Helm upgrade --install
-    │   ├── Smoke tests
-    │   └── Load test (Locust, 5-min burst)
+    │   └── Smoke tests
     │
-    ├─ Stage 5: Deploy Production [manual approval gate]
-    │   ├── Rolling update (maxUnavailable: 0, maxSurge: 1)
-    │   ├── Readiness probe gates traffic
-    │   └── Post-deploy smoke test
-    │
-    └─ Stage 6: Post-Deploy Validation
-        ├── Monitor 5xx rate for 15 minutes
-        └── Auto-rollback if 5xx > 1%
+    └─ Stage 5: Deploy Production [manual approval gate]
+        ├── Rolling update (maxUnavailable: 0, maxSurge: 1)
+        ├── Readiness probe gates traffic
+        └── Post-deploy smoke test
 ```
 
 ### Zero-Downtime Deployment
 
 - **Rolling updates:** `maxUnavailable: 0` ensures no capacity loss during deployment.
-- **Readiness probe:** `/api/v1/health/ready` checks DB, Redis, and Prometheus connectivity. Pod only receives traffic after passing.
+- **Readiness probe:** `/api/v1/health/ready` checks DB and Redis connectivity. Pod only receives traffic after passing.
 - **Graceful shutdown:** 30-second drain period for in-flight requests before SIGTERM.
 
 ---
 
-## 10. Trade-offs & Alternatives
+## 11. Scalability & Performance Strategy
 
-### Key Architectural Decisions
+| Strategy | Implementation | Target |
+|----------|---------------|--------|
+| **Pre-computed aggregates** | Batch job writes SLI aggregates to PostgreSQL. Recommendations served from cache. | Recommendation retrieval < 500ms (p95) |
+| **Caching** | Redis cache with 24h TTL for recommendations. Invalidated on graph change or SLO acceptance. | Cache hit rate > 80% |
+| **Async processing** | Dependency graph ingestion returns 202 Accepted. SCC detection runs as background task. | Graph ingestion < 30s (1000 services) |
+| **Efficient graph traversal** | PostgreSQL recursive CTEs with partial indexes (`WHERE NOT is_stale`). Cycle prevention via path arrays. | 3-hop traversal < 100ms (5000 services) |
+| **Connection pooling** | SQLAlchemy async pool (max 20 connections, 10 overflow per instance). | No connection exhaustion under load |
+| **Horizontal scaling** | API pods scale on CPU > 70% or p95 latency > 400ms (HPA: 3→10). | 200+ concurrent users |
+
+---
+
+## 12. Trade-offs & Alternatives
 
 | Decision | Choice | Alternative Considered | Rationale |
 |----------|--------|----------------------|-----------|
-| **Graph storage** | PostgreSQL with recursive CTEs | Neo4j | PostgreSQL is sufficient for 10,000+ edges with proper indexing. Avoids introducing a new database technology. Neo4j deferred unless graph analytics (PageRank, community detection) prove necessary. |
-| **Telemetry strategy** | Query existing Prometheus/Mimir | Build dedicated time-series store | Eliminates data duplication. Reduces operational burden. Acceptable trade-off: dependent on Prometheus availability (mitigated by circuit breaker + cached fallback). |
-| **ML approach** | Rule-based composite math (MVP) → GNN + TFT (Phase 5) | Full ML from day one | Rule-based is transparent, testable, and ships faster. ML deferred until the system has enough feedback data to train on. Phased approach builds trust. |
-| **Latency SLO computation** | End-to-end trace measurement | Mathematical composition of percentiles | Percentiles are non-additive (p99 of sum ≠ sum of p99s). Trace-based measurement is mathematically correct for latency SLOs. Trade-off: depends on Tempo availability. |
-| **Deployment model** | Modular monolith (2 workloads) | Microservices | Avoids premature decomposition. Single codebase with Clean Architecture layers provides clear boundaries. Can extract services later if needed. |
-| **Task queue** | Celery + Redis | APScheduler / Kafka Streams | Celery provides distributed execution with visibility. Redis dual-purposed as broker and cache. Kafka deferred (no streaming requirements for MVP). |
-| **Approval model** | Semi-automated (human-on-the-loop) | Full automation | Trust is earned, not assumed. Auto-approval rules (FR-11) provide graduation path without architectural changes. |
-| **External dependency handling** | Use observed availability, not published SLA | Trust provider SLAs | Published SLAs are often overstated. Observed data is ground truth. 10% pessimistic adjustment when no monitoring data exists. |
+| **Graph storage** | PostgreSQL with recursive CTEs | Neo4j | Sufficient for 10,000+ edges with proper indexing. Avoids new database technology. Neo4j deferred unless PageRank or community detection prove necessary. |
+| **Telemetry strategy** | Query existing Prometheus/Mimir | Build dedicated time-series store | Eliminates data duplication. Reduces operational burden. Trade-off: dependent on Prometheus availability. |
+| **Recommendation methodology** | Rule-based composite math + statistical percentiles (MVP) | Full ML from day one | Transparent, testable, ships faster. ML (GNN + TFT) deferred to Phase 5 when feedback data is available. |
+| **Explainability** | Weighted heuristic attribution (MVP) | SHAP from day one | Fixed domain-expert weights are interpretable and require no training data. SHAP planned for Phase 5 when models exist. |
+| **Latency SLO computation** | Percentile-based with noise margins | Mathematical composition of percentiles | Percentiles are non-additive (p99 of sum ≠ sum of p99s). End-to-end trace-based measurement (via Tempo) is architecturally planned but not yet integrated. |
+| **Deployment model** | Modular monolith (single workload + in-process scheduler) | Microservices / Celery workers | Avoids premature decomposition. Clean Architecture provides clear boundaries. Celery migration planned at scale. |
+| **External dependency handling** | Adaptive buffer: min(observed, published × 10x margin) | Trust provider SLAs | Published SLAs are often overstated. Observed data is ground truth. 10x pessimistic adjustment when no monitoring data exists. |
+| **Approval model** | Semi-automated (human-on-the-loop) | Full automation | Trust is earned, not assumed. Auto-approval rules provide graduation path. |
 
 ---
 
-## 11. Risks & Mitigation
+## 13. Risks & Mitigation
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| **Prometheus query latency spikes** during high-traffic periods | Recommendation generation exceeds 5s target | High | Pre-compute aggregates in batch. Circuit breaker on Prometheus client (10 failures → 30s open). Query Mimir (long-term store) for historical queries. Serve stale cached recommendations as fallback. |
-| **PostgreSQL recursive CTE performance degrades** at >10,000 edges | Graph traversal exceeds 100ms target | Medium | Benchmark early with production-scale data. Partial indexes on non-stale edges. If insufficient, migrate graph queries to Neo4j or materialized adjacency tables. |
-| **Incomplete dependency graph** from partial OTel instrumentation | Recommendations miss critical dependencies | High | Multi-source discovery (traces + mesh + K8s + manual). Confidence scores per edge based on source count and freshness. Divergence alerting when runtime graph differs from declared config. |
-| **SRE distrust of recommendations** | Low adoption, system becomes shelfware | Medium | Explainability from day one (SHAP, counterfactuals, natural-language summaries). Start with non-critical services. Capture feedback loop. Never auto-apply without explicit opt-in. |
-| **Schema migrations on large sli_aggregates table** | Extended downtime during migrations | Medium | Partition table from day one (monthly by computed_at). Use `pg_repack` for zero-lock rewrites. Test all migrations on staging with production-scale data. |
-| **Celery worker memory leaks** from long-running batch jobs | Worker OOM kills, missed aggregation cycles | Medium | Set `worker_max_tasks_per_child=100` to recycle workers. Monitor RSS via container metrics. Use `--pool=prefork` for process isolation. |
-| **Redis failure** takes down rate limiting and caching | API unprotected from abuse; all requests hit DB | Low | Rate limiting falls back to in-process token bucket (per-instance). Cache miss falls back to direct Prometheus queries (higher latency but functional). |
+| **Prometheus query latency spikes** | Recommendation exceeds 5s target | High | Pre-compute aggregates in batch. Serve stale cached recommendations as fallback. Circuit breaker planned. |
+| **PostgreSQL recursive CTE performance degrades** at >10,000 edges | Graph traversal exceeds 100ms | Medium | Partial indexes on non-stale edges. Benchmark early with production-scale data. Neo4j migration if needed. |
+| **Incomplete dependency graph** from partial OTel instrumentation | Recommendations miss critical dependencies | High | Multi-source discovery (OTel + K8s + manual). Confidence scores per edge. Divergence alerting. |
+| **SRE distrust of recommendations** | Low adoption | Medium | Explainability from day one (attribution, counterfactuals, provenance). Start with non-critical services. Capture feedback loop. |
+| **Schema migrations on large sli_aggregates** | Extended downtime | Medium | Partition from day one (monthly by computed_at). Test migrations on staging with production-scale data. |
+| **Redis failure** takes down caching | All requests hit DB | Low | Cache miss falls back to direct Prometheus queries (higher latency but functional). Rate limiting falls back to in-process token bucket. |
 
 ---
 
-## 12. Future Considerations
+## 14. Future Considerations
 
-### Phase 3-4: Intelligence & Adaptation (Post-MVP)
+### Phase 3-4: Intelligence & Adaptation
 
-- **Drift Detection Ensemble:** Page-Hinkley + ADWIN + KS-test with majority voting. Background worker runs every 15 minutes per service. Confirmed drift triggers recommendation re-evaluation and service owner notification.
-- **Burn-Rate Alert Generation:** Auto-generate Prometheus recording rules in Google SRE multi-window format (14.4x/1h, 6x/6h, 1x/3d) for each accepted SLO.
-- **Auto-Approval Rules Engine:** Configurable policies for low-criticality services (e.g., "auto-accept Balanced tier for `criticality: low` with confidence > 0.85"). All auto-approvals logged with full audit trail.
-- **Organizational Dashboard:** Pre-computed materialized views for SLO coverage, error budget health, and recommendation quality metrics.
+- **Drift Detection Ensemble:** Page-Hinkley + ADWIN + KS-test with majority voting. Background worker every 15 minutes. Confirmed drift triggers recommendation re-evaluation.
+- **Burn-Rate Alert Generation:** Auto-generate Prometheus recording rules in Google SRE multi-window format (14.4x/1h, 6x/6h, 1x/3d).
+- **Auto-Approval Rules Engine:** Configurable policies for low-criticality services (e.g., "auto-accept Balanced for `criticality: low` with confidence > 0.85").
+- **Grafana Tempo Integration:** End-to-end trace-based latency measurement for mathematically correct latency SLO computation.
 
 ### Phase 5: Scale & Graduate
 
-- **GNN + Temporal Fusion Transformer:** Graph Attention Network for structural dependency modeling fused with TFT for temporal forecasting. Enables proactive SLO violation prediction beyond rule-based composite math.
-- **SLO-as-Code Export:** OpenSLO YAML format for GitOps workflows. Sloth-compatible YAML for Prometheus recording rules. PR-based workflow to SLO config repository.
-- **Composite / Journey-Level SLOs:** Aggregate multiple service SLOs into user-journey SLOs (e.g., "checkout journey"). Monte Carlo simulation for complex mixed topologies.
-- **What-If Scenario Modeling:** Interactive simulation of architectural changes (adding circuit breakers, async queues, fallback providers) on achievable SLOs.
-- **Neo4j Migration:** If graph analytics requirements emerge (PageRank for service importance, community detection for blast radius), migrate graph storage from PostgreSQL to Neo4j.
+- **GNN + Temporal Fusion Transformer:** Graph Attention Network for structural modeling + TFT for temporal forecasting. Enables proactive SLO violation prediction.
+- **SHAP Feature Attribution:** Replace heuristic weights with ML-derived SHAP values.
+- **SLO-as-Code Export:** OpenSLO YAML for GitOps workflows. Sloth-compatible YAML for Prometheus recording rules.
+- **Composite / Journey-Level SLOs:** Aggregate service SLOs into user-journey SLOs. Monte Carlo simulation for complex topologies.
+- **What-If Scenario Modeling:** Interactive simulation of architectural changes on achievable SLOs.
 
 ### Known Limitations
 
-1. **Single-region deployment** — Multi-region support requires addressing data replication, split-brain graph scenarios, and regional Prometheus federation.
-2. **No throughput or correctness SLOs** — MVP covers availability and latency only. Throughput SLOs require request-rate modeling; correctness requires domain-specific validation.
-3. **No real-time alerting** — The system recommends SLO targets and alert configurations but does not replace Prometheus Alertmanager for runtime alerting.
-4. **Correlated failures not modeled in MVP** — Composite availability math assumes independent failures. Shared infrastructure (same region, same network) creates correlated failure modes. Monte Carlo simulation in Phase 5 addresses this.
+1. **Single-region deployment** — Multi-region requires data replication and regional Prometheus federation.
+2. **No throughput or correctness SLOs** — MVP covers availability and latency only.
+3. **No real-time alerting** — Recommends targets, does not replace Prometheus Alertmanager.
+4. **Correlated failures not modeled** — Composite math assumes independent failures. Monte Carlo simulation in Phase 5 addresses this.
+5. **Latency composition is qualitative** — Without Tempo integration, latency SLOs are based on observed percentiles rather than end-to-end trace analysis.
