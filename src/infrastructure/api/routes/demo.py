@@ -351,19 +351,21 @@ def _generate_demo_availability_recommendation(
                 ),
             ],
             dependency_impact=DependencyImpactApiModel(
-                composite_availability_bound=99.85,
+                # Derived from seed data: R_composite = R_payment × R_auth = 0.9950 × 0.9990 = 0.9940
+                composite_availability_bound=99.40,
                 bottleneck_service="auth-service",
-                bottleneck_contribution="auth-service contributes 0.08% to composite availability bound degradation",
-                hard_dependency_count=3,
+                bottleneck_contribution="auth-service (99.9%) is the sole hard dependency; serial product caps composite bound at 99.40%",
+                hard_dependency_count=1,
                 soft_dependency_count=1,
             ),
             counterfactuals=[
                 CounterfactualApiModel(
                     condition="If auth-service SLO increased from 99.9% to 99.95%",
-                    result="Composite availability bound would improve to 99.92%, enabling higher SLO target",
+                    # 0.9950 × 0.9995 = 0.9945 → 99.45%
+                    result="Composite availability bound would improve to 99.45%, enabling a tighter SLO target",
                     feature="dependency_stability",
-                    original_value=99.85,
-                    perturbed_value=99.92,
+                    original_value=99.40,
+                    perturbed_value=99.45,
                 ),
                 CounterfactualApiModel(
                     condition="If deployment frequency doubled to 2x/week",

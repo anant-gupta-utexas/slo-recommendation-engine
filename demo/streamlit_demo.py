@@ -785,6 +785,17 @@ def render_step_3():
                     attrs = explanation.get("feature_attribution", [])
                     if attrs:
                         st.caption("Feature Attribution")
+                        st.caption(
+                            "**How this is calculated (current):** Each feature is assigned a "
+                            "domain-expert weight (e.g. historical availability 40%, dependency risk 30%). "
+                            "The feature's measured value is multiplied by its weight, then all contributions "
+                            "are normalised to sum to 100%. This is a weighted linear decomposition — "
+                            "deterministic and auditable, not learned from data. "
+                            "**Future (SHAP-based):** An ML model would be trained on historical SLO outcomes. "
+                            "SHAP values would then attribute each prediction to individual features by computing "
+                            "their marginal contribution across all possible feature orderings, giving a "
+                            "model-faithful explanation rather than a hand-tuned weight."
+                        )
                         for attr in attrs:
                             feat = attr.get("feature", "")
                             contrib = attr.get("contribution", 0)
