@@ -7,6 +7,25 @@
 
 ---
 
+## Table of Contents
+
+1. [Problem Statement & Requirements](#1-problem-statement--requirements)
+2. [High-Level Architecture Overview](#2-high-level-architecture-overview)
+3. [System Components & Services](#3-system-components--services)
+4. [Data Architecture](#4-data-architecture)
+5. [SLO Recommendation Algorithm](#5-slo-recommendation-algorithm)
+6. [API Design](#6-api-design)
+7. [Technology Stack](#7-technology-stack)
+8. [Dependency Modeling](#8-dependency-modeling)
+9. [Security Architecture](#9-security-architecture)
+10. [Deployment Architecture](#10-deployment-architecture)
+11. [Scalability & Performance Strategy](#11-scalability--performance-strategy)
+12. [Trade-offs & Alternatives](#12-trade-offs--alternatives)
+13. [Risks & Mitigation](#13-risks--mitigation)
+14. [Future Considerations](#14-future-considerations)
+
+---
+
 ## 1. Problem Statement & Requirements
 
 ### What We Are Building
@@ -42,27 +61,41 @@ The system follows **Clean Architecture** principles with three distinct layers 
 ### System Context Diagram
 
 ```mermaid
-C4Context
-    title System Context — SLO Recommendation Engine
+graph TD
+    %% ── Users ──
+    sre(["👤 SRE / Platform Engineer<br/><i>Reviews, approves, governs SLOs</i>"])
+    dev(["👤 Service Owner<br/><i>Views & acts on recommendations</i>"])
 
-    Person(sre, "SRE / Platform Engineer", "Reviews, approves, and governs SLO recommendations")
-    Person(dev, "Service Owner", "Views recommendations, accepts/modifies/rejects for owned services")
+    %% ── UI Layer ──
+    backstage["🖥️ Backstage Developer Platform<br/><i>Developer-facing UI</i>"]
 
-    System(slo_engine, "SLO Recommendation Engine", "Analyzes telemetry and dependencies to recommend availability and latency SLOs")
+    %% ── Core System ──
+    slo_engine["⚙️ SLO Recommendation Engine<br/><i>Analyzes telemetry & dependencies<br/>to recommend availability & latency SLOs</i>"]
 
-    System_Ext(prometheus, "Prometheus / Mimir", "Time-series metric store (PromQL API)")
-    System_Ext(otel, "OTel Collector", "Publishes service graph and span metrics to Prometheus")
-    System_Ext(k8s, "Kubernetes API", "Service discovery, deployment metadata")
-    System_Ext(backstage, "Backstage Developer Platform", "Developer-facing UI consuming the SLO Engine API")
-    System_Ext(idp, "Identity Provider (OIDC)", "Authentication and authorization (Keycloak/Okta)")
+    %% ── Data Sources ──
+    subgraph data_sources [" Data Sources "]
+        prometheus[("📊 Prometheus / Mimir<br/><i>Time-series metrics (PromQL)</i>")]
+        k8s["☸️ Kubernetes API<br/><i>Service discovery, deployment metadata</i>"]
+        otel["📡 OTel Collector<br/><i>Service graph & span metrics</i>"]
+    end
 
-    Rel(sre, slo_engine, "Manages SLOs via API / Backstage")
-    Rel(dev, backstage, "Views recommendations")
-    Rel(backstage, slo_engine, "REST API (JSON)", "API Key auth")
-    Rel(slo_engine, prometheus, "PromQL queries", "HTTP/Bearer")
-    Rel(slo_engine, k8s, "Service/Deployment reads", "ServiceAccount")
-    Rel(otel, prometheus, "Span metrics, service graph metrics")
-    Rel(slo_engine, idp, "JWKS validation", "HTTPS")
+    %% ── Auth ──
+    idp["🔐 Identity Provider (OIDC)<br/><i>Keycloak / Okta</i>"]
+
+    %% ── Relationships: Users → UI → Engine ──
+    sre -- "Manages SLOs<br/>via API / Backstage" --> slo_engine
+    dev -- "Views recommendations" --> backstage
+    backstage -- "REST API (JSON)<br/>API Key auth" --> slo_engine
+
+    %% ── Relationships: Engine → Data Sources ──
+    slo_engine -- "PromQL queries<br/>HTTP/Bearer" --> prometheus
+    slo_engine -- "Service/Deployment reads<br/>ServiceAccount" --> k8s
+
+    %% ── Relationships: OTel → Prometheus ──
+    otel -- "Span metrics,<br/>service graph metrics" --> prometheus
+
+    %% ── Relationships: Engine → Auth ──
+    slo_engine -. "JWKS validation<br/>HTTPS" .-> idp
 ```
 
 ### Architectural Style
@@ -88,66 +121,95 @@ The single most important architectural decision is that the SLO Engine **querie
 ### Component Diagram
 
 ```mermaid
-graph TD
-    subgraph External["External Systems"]
-        PROM[("Prometheus / Mimir")]
-        K8S["Kubernetes API"]
-        IDP["Identity Provider"]
-        BACKSTAGE["Backstage"]
+graph LR
+    %% ── External: Clients (left edge) ──
+    BACKSTAGE["🖥️ Backstage"]
+    IDP["🔐 Identity Provider"]
+
+    %% ── API Layer ──
+    subgraph API_LAYER ["API Layer (FastAPI)"]
+        direction TB
+        AUTH["Auth Middleware<br/>(API Key + JWT)"]
+        RATE["Rate Limiter<br/>(Token Bucket)"]
+        ROUTES["API Routes<br/>(/api/v1/*)"]
+        AUTH --> RATE --> ROUTES
     end
 
-    subgraph SLO_ENGINE["SLO Recommendation Engine"]
-        subgraph API_LAYER["API Layer (FastAPI)"]
-            AUTH["Auth Middleware<br/>(API Key + JWT)"]
-            RATE["Rate Limiter<br/>(Token Bucket)"]
-            ROUTES["API Routes<br/>(/api/v1/*)"]
-        end
-
-        subgraph APP_LAYER["Application Layer (Use Cases)"]
-            UC_INGEST["IngestDependencyGraph"]
-            UC_RECOMMEND["GenerateRecommendation"]
-            UC_CONSTRAINT["RunConstraintAnalysis"]
-            UC_IMPACT["RunImpactAnalysis"]
-            UC_LIFECYCLE["ManageSloLifecycle"]
-            UC_BUDGET["GetErrorBudgetBreakdown"]
-        end
-
-        subgraph DOMAIN["Domain Layer"]
-            DEP_GRAPH["DependencyGraph<br/>Entity"]
-            SLO_CALC["Availability &<br/>Latency Calculators"]
-            COMPOSITE["Composite Availability<br/>Service"]
-            EXPLAIN["Explainability<br/>(Attribution +<br/>Counterfactuals)"]
-            CONSTRAINT["Constraint<br/>Propagation"]
-            COLD["Cold-Start<br/>Strategy"]
-        end
-
-        subgraph INFRA["Infrastructure Layer"]
-            PG[("PostgreSQL")]
-            REDIS[("Redis")]
-            PROM_CLIENT["Prometheus<br/>Query Client"]
-            K8S_CLIENT["Kubernetes<br/>Client"]
-            SCHEDULER["APScheduler<br/>(Background Tasks)"]
-        end
+    %% ── Application Layer ──
+    subgraph APP_LAYER ["Application Layer (Use Cases)"]
+        direction TB
+        UC_INGEST["IngestDependencyGraph"]
+        UC_RECOMMEND["GenerateRecommendation"]
+        UC_CONSTRAINT["RunConstraintAnalysis"]
+        UC_IMPACT["RunImpactAnalysis"]
+        UC_LIFECYCLE["ManageSloLifecycle"]
+        UC_BUDGET["GetErrorBudgetBreakdown"]
     end
 
-    BACKSTAGE -->|REST/JSON| AUTH
-    AUTH --> RATE --> ROUTES
-    ROUTES --> UC_INGEST & UC_RECOMMEND & UC_CONSTRAINT & UC_IMPACT & UC_LIFECYCLE & UC_BUDGET
+    %% ── Domain Layer ──
+    subgraph DOMAIN ["Domain Layer (Business Logic)"]
+        direction TB
+        DEP_GRAPH["DependencyGraph<br/>Entity"]
+        SLO_CALC["Availability &<br/>Latency Calculators"]
+        COMPOSITE["Composite Availability<br/>Service"]
+        EXPLAIN["Explainability<br/>(Attribution +<br/>Counterfactuals)"]
+        CONSTRAINT["Constraint<br/>Propagation"]
+        COLD["Cold-Start<br/>Strategy"]
+    end
+
+    %% ── Infrastructure Layer ──
+    subgraph INFRA ["Infrastructure Layer"]
+        direction TB
+        PG[("PostgreSQL")]
+        REDIS[("Redis")]
+        PROM_CLIENT["Prometheus<br/>Query Client"]
+        K8S_CLIENT["Kubernetes<br/>Client"]
+        SCHEDULER["APScheduler<br/>(Background Tasks)"]
+    end
+
+    %% ── External: Data Sources (right edge) ──
+    PROM[("📊 Prometheus / Mimir")]
+    K8S["☸️ Kubernetes API"]
+
+    %% ── Client → API ──
+    BACKSTAGE -- "REST/JSON" --> AUTH
+    AUTH -. "JWKS" .-> IDP
+
+    %% ── API → Use Cases (single fan-out from Routes) ──
+    ROUTES --> UC_INGEST
+    ROUTES --> UC_RECOMMEND
+    ROUTES --> UC_CONSTRAINT
+    ROUTES --> UC_IMPACT
+    ROUTES --> UC_LIFECYCLE
+    ROUTES --> UC_BUDGET
+
+    %% ── Use Cases → Domain (grouped by use case) ──
     UC_INGEST --> DEP_GRAPH
-    UC_RECOMMEND --> SLO_CALC & COMPOSITE & EXPLAIN & COLD
-    UC_CONSTRAINT --> COMPOSITE & CONSTRAINT
-    UC_IMPACT --> COMPOSITE & DEP_GRAPH
+    UC_RECOMMEND --> SLO_CALC
+    UC_RECOMMEND --> COMPOSITE
+    UC_RECOMMEND --> EXPLAIN
+    UC_RECOMMEND --> COLD
+    UC_CONSTRAINT --> COMPOSITE
+    UC_CONSTRAINT --> CONSTRAINT
+    UC_IMPACT --> COMPOSITE
+    UC_IMPACT --> DEP_GRAPH
     UC_LIFECYCLE --> DEP_GRAPH
     UC_BUDGET --> CONSTRAINT
+
+    %% ── Domain → Infrastructure ──
     DEP_GRAPH --> PG
     SLO_CALC --> PROM_CLIENT
     COMPOSITE --> PROM_CLIENT
+
+    %% ── Infrastructure → External ──
     PROM_CLIENT --> PROM
     K8S_CLIENT --> K8S
-    SCHEDULER --> DEP_GRAPH & SLO_CALC
-    SCHEDULER --> REDIS
-    AUTH --> IDP
     RATE --> REDIS
+    SCHEDULER --> REDIS
+
+    %% ── Background scheduler → Domain ──
+    SCHEDULER -.-> DEP_GRAPH
+    SCHEDULER -.-> SLO_CALC
 ```
 
 ### Component Responsibilities
@@ -180,6 +242,8 @@ graph TD
 
 ### 4.1 Data Models (ERD)
 
+#### Service Graph Tables
+
 ```mermaid
 erDiagram
     SERVICES {
@@ -208,6 +272,26 @@ erDiagram
         float confidence_score
         timestamptz last_observed_at
         boolean is_stale
+    }
+
+    CIRCULAR_DEPENDENCY_ALERTS {
+        uuid id PK
+        jsonb cycle_path
+        timestamptz detected_at
+        enum status "open|acknowledged|resolved"
+    }
+
+    SERVICES ||--o{ SERVICE_DEPENDENCIES : "source"
+    SERVICES ||--o{ SERVICE_DEPENDENCIES : "target"
+```
+
+#### SLO Recommendation & Lifecycle Tables
+
+```mermaid
+erDiagram
+    SERVICES {
+        uuid id PK
+        varchar service_id UK
     }
 
     SLO_RECOMMENDATIONS {
@@ -246,6 +330,22 @@ erDiagram
         timestamptz timestamp
     }
 
+    SERVICES ||--o{ SLO_RECOMMENDATIONS : "has"
+    SERVICES ||--o| ACTIVE_SLOS : "has active"
+    SERVICES ||--o{ SLO_AUDIT_LOG : "audited"
+    SLO_RECOMMENDATIONS ||--o{ SLO_AUDIT_LOG : "referenced in"
+    SLO_RECOMMENDATIONS ||--o| ACTIVE_SLOS : "source of"
+```
+
+#### Telemetry & Access Control Tables
+
+```mermaid
+erDiagram
+    SERVICES {
+        uuid id PK
+        varchar service_id UK
+    }
+
     SLI_AGGREGATES {
         uuid id PK
         uuid service_id FK
@@ -254,13 +354,6 @@ erDiagram
         decimal value
         bigint sample_count
         timestamptz computed_at
-    }
-
-    CIRCULAR_DEPENDENCY_ALERTS {
-        uuid id PK
-        jsonb cycle_path
-        timestamptz detected_at
-        enum status "open|acknowledged|resolved"
     }
 
     API_KEYS {
@@ -272,87 +365,111 @@ erDiagram
         timestamptz created_at
     }
 
-    SERVICES ||--o{ SERVICE_DEPENDENCIES : "source"
-    SERVICES ||--o{ SERVICE_DEPENDENCIES : "target"
-    SERVICES ||--o{ SLO_RECOMMENDATIONS : "has"
-    SERVICES ||--o| ACTIVE_SLOS : "has active"
     SERVICES ||--o{ SLI_AGGREGATES : "metrics for"
-    SERVICES ||--o{ SLO_AUDIT_LOG : "audited"
-    SLO_RECOMMENDATIONS ||--o{ SLO_AUDIT_LOG : "referenced in"
-    SLO_RECOMMENDATIONS ||--o| ACTIVE_SLOS : "source of"
 ```
 
 ### 4.2 Data Flow
 
+The data flow is split into three focused diagrams: ingestion, recommendation compute, and API delivery.
+
+#### Data Flow: Ingestion
+
 ```mermaid
-flowchart LR
-    subgraph SOURCES["Data Sources"]
-        PROM_SRC[("Prometheus<br/>/ Mimir")]
-        K8S_SRC["Kubernetes<br/>API"]
-        OTEL_SRC["OTel Service<br/>Graph Connector"]
-        MANUAL["Manual API<br/>Submission"]
+flowchart TD
+    subgraph SOURCES [" Data Sources "]
+        PROM_SRC[("Prometheus / Mimir")]
+        K8S_SRC["Kubernetes API"]
+        OTEL_SRC["OTel Service Graph Connector"]
+        MANUAL["Manual API Submission"]
     end
 
-    subgraph INGESTION["Ingestion & Aggregation"]
-        BATCH["Batch<br/>Aggregation Job"]
-        GRAPH_INGEST["Dependency Graph<br/>Ingestion"]
+    subgraph INGESTION [" Ingestion & Aggregation "]
+        BATCH["Batch Aggregation Job<br/><i>PromQL queries → pre-computed SLI windows</i>"]
+        GRAPH_INGEST["Dependency Graph Ingestion<br/><i>Multi-source merge, edge dedup, SCC detection</i>"]
     end
 
-    subgraph STORAGE["Persistent Storage"]
-        PG_AGG[("sli_aggregates")]
-        PG_GRAPH[("services +<br/>service_dependencies")]
-        PG_RECS[("slo_recommendations")]
-        PG_SLOS[("active_slos")]
-        PG_AUDIT[("slo_audit_log")]
-        REDIS_CACHE[("Redis Cache")]
+    subgraph STORAGE [" PostgreSQL "]
+        PG_AGG[("sli_aggregates<br/><i>1h / 1d / 7d / 28d / 90d windows</i>")]
+        PG_GRAPH[("services + service_dependencies<br/><i>Graph nodes & annotated edges</i>")]
     end
 
-    subgraph COMPUTE["Recommendation Compute"]
-        GRAPH_TRAVERSE["Graph Traversal<br/>(Recursive CTE)"]
-        COMPOSITE["Composite<br/>Availability Math"]
-        LATENCY["Latency Tier<br/>Computation"]
-        TIERS["Availability Tier<br/>Calculation<br/>(Conservative/<br/>Balanced/Aggressive)"]
-        ATTR_ENG["Feature<br/>Attribution"]
-        CONSTRAINT_ENG["Constraint<br/>Propagation"]
-    end
-
-    subgraph DELIVERY["API Delivery"]
-        REST_API["REST API<br/>(FastAPI)"]
-        BACKSTAGE_INT["Backstage<br/>Integration"]
-    end
-
-    subgraph CONTINUOUS["Continuous Monitoring"]
-        STALE_CHECK["Staleness<br/>Checker"]
-    end
-
-    PROM_SRC -->|PromQL| BATCH
+    PROM_SRC -- "PromQL" --> BATCH
     K8S_SRC --> GRAPH_INGEST
     OTEL_SRC --> GRAPH_INGEST
     MANUAL --> GRAPH_INGEST
 
     BATCH --> PG_AGG
     GRAPH_INGEST --> PG_GRAPH
+```
 
-    PG_AGG --> COMPOSITE & LATENCY
+#### Data Flow: Recommendation Compute
+
+```mermaid
+flowchart TD
+    subgraph STORAGE [" PostgreSQL (read) "]
+        PG_AGG[("sli_aggregates")]
+        PG_GRAPH[("services + service_dependencies")]
+    end
+
+    subgraph COMPUTE [" Recommendation Compute Pipeline "]
+        GRAPH_TRAVERSE["Graph Traversal<br/><i>Recursive CTE, depth-limited</i>"]
+        COMPOSITE["Composite Availability Math<br/><i>Serial × Parallel formulas</i>"]
+        LATENCY["Latency Tier Computation<br/><i>p999 / p99 / p95 + noise margin</i>"]
+        TIERS["Availability Tier Calculation<br/><i>Conservative / Balanced / Aggressive</i>"]
+        ATTR_ENG["Feature Attribution<br/><i>Weighted heuristic + counterfactuals</i>"]
+        CONSTRAINT_ENG["Constraint Propagation<br/><i>Error budget breakdown, unachievability detection</i>"]
+    end
+
+    subgraph OUTPUT [" Output "]
+        PG_RECS[("slo_recommendations")]
+        REDIS_CACHE[("Redis Cache<br/><i>TTL = 24h</i>")]
+    end
+
+    subgraph CONTINUOUS [" Continuous Monitoring "]
+        STALE_CHECK["Staleness Checker<br/><i>168h threshold</i>"]
+    end
+
     PG_GRAPH --> GRAPH_TRAVERSE
     GRAPH_TRAVERSE --> COMPOSITE
+
+    PG_AGG --> COMPOSITE
+    PG_AGG --> LATENCY
 
     COMPOSITE --> TIERS
     LATENCY --> TIERS
     TIERS --> ATTR_ENG
+    COMPOSITE --> CONSTRAINT_ENG
+
     ATTR_ENG --> PG_RECS
     PG_RECS --> REDIS_CACHE
 
-    COMPOSITE --> CONSTRAINT_ENG
-    CONSTRAINT_ENG --> REST_API
+    PG_GRAPH --> STALE_CHECK
+    STALE_CHECK -. "re-evaluate" .-> COMPOSITE
+```
+
+#### Data Flow: API Delivery & Lifecycle
+
+```mermaid
+flowchart TD
+    REDIS_CACHE[("Redis Cache")]
+    CONSTRAINT_ENG["Constraint Propagation"]
+
+    subgraph DELIVERY [" API Delivery "]
+        REST_API["REST API (FastAPI)<br/><i>Auth, rate limiting, OpenAPI</i>"]
+        BACKSTAGE_INT["Backstage Integration"]
+    end
+
+    subgraph LIFECYCLE [" SLO Lifecycle Storage "]
+        PG_SLOS[("active_slos")]
+        PG_AUDIT[("slo_audit_log<br/><i>Append-only</i>")]
+    end
 
     REDIS_CACHE --> REST_API
+    CONSTRAINT_ENG --> REST_API
     REST_API --> BACKSTAGE_INT
 
-    REST_API -->|accept/modify/reject| PG_SLOS & PG_AUDIT
-
-    PG_GRAPH --> STALE_CHECK
-    STALE_CHECK -->|re-evaluate| COMPOSITE
+    REST_API -- "accept / modify / reject" --> PG_SLOS
+    REST_API -- "accept / modify / reject" --> PG_AUDIT
 ```
 
 ### 4.3 Storage Strategy
