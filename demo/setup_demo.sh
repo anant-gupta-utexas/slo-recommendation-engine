@@ -46,13 +46,18 @@ until docker compose exec -T db pg_isready -U slo_user -d slo_engine &>/dev/null
 done
 success "PostgreSQL is ready"
 
-# ── Step 3: Run Alembic migrations ─────────────────────────────────
-info "Step 3/5: Running database migrations..."
-DATABASE_URL="$DB_URL" alembic upgrade head
+# ── Step 3: Install Python dependencies ──────────────────────────
+info "Step 3/5: Installing Python dependencies..."
+uv sync --extra demo
+success "Dependencies installed"
+
+# ── Step 4: Run Alembic migrations ─────────────────────────────────
+info "Step 4/5: Running database migrations..."
+DATABASE_URL="$DB_URL" .venv/bin/alembic upgrade head
 success "Migrations applied"
 
-# ── Step 4: Seed demo API key ──────────────────────────────────────
-info "Step 4/5: Creating demo API key..."
+# ── Step 5: Seed demo API key ──────────────────────────────────────
+info "Step 5/5: Creating demo API key..."
 
 # Generate bcrypt hash at runtime using the project's Python environment
 API_KEY_HASH=$(.venv/bin/python -c "
@@ -69,11 +74,6 @@ docker compose exec -T db psql -U slo_user -d slo_engine -c "
 " >/dev/null 2>&1
 
 success "API key ready"
-
-# ── Step 5: Install Python demo dependencies ───────────────────────
-info "Step 5/5: Installing demo Python dependencies..."
-uv sync --extra demo
-success "Dependencies installed"
 
 # ── Wait for API to be healthy ─────────────────────────────────────
 info "Waiting for API to be healthy..."
@@ -94,7 +94,7 @@ echo -e "${BOLD}${GREEN}║   Setup Complete!                                 �
 echo -e "${BOLD}${GREEN}╚═══════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  Run the demo:"
-echo -e "    ${BOLD}streamlit run scripts/streamlit_demo.py${NC}"
+echo -e "    ${BOLD}streamlit run demo/streamlit_demo.py${NC}"
 echo ""
 echo -e "  API Key (paste into sidebar):"
 echo -e "    ${BOLD}${API_KEY_RAW}${NC}"

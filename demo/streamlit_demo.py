@@ -3,10 +3,9 @@ SLO Recommendation Engine - Interactive Streamlit Demo
 Walks through the full workflow with visual UI, editable inputs, and formatted results.
 
 Usage:
-    streamlit run scripts/streamlit_demo.py
+    streamlit run demo/streamlit_demo.py
 """
 
-import json
 from datetime import datetime
 
 import matplotlib.patches as mpatches
@@ -15,8 +14,11 @@ import networkx as nx
 import pandas as pd
 import requests
 import streamlit as st
-
-from concept_renderer import render_circular_dep_concepts, render_reference_page, render_step_concepts
+from concept_renderer import (
+    render_circular_dep_concepts,
+    render_reference_page,
+    render_step_concepts,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
