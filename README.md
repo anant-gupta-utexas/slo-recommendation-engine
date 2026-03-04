@@ -183,7 +183,7 @@ slo-recommendation-engine/
 ├── docs/                         # Evergreen documentation
 │   ├── 1_product/                #   PRD, problem statement, research
 │   ├── 2_architecture/           #   System design, TRD
-│   ├── 3_guides/                 #   Getting started, core concepts, dependency graph guide
+│   ├── 3_guides/                 #   Core concepts, dependency graph guide, slo recommendation guide
 │   └── 4_testing/                #   Testing strategy and examples
 ├── dev/                          # Work-in-progress feature plans
 │   ├── active/                   #   Current feature development
@@ -289,9 +289,9 @@ Main merge → Push to GHCR → Deploy to Staging → Smoke Tests
 | Feature | Status | Description |
 |---------|--------|-------------|
 | **FR-1** Service Dependency Graph | Production Ready | Ingest, store, query, manage dependency graphs |
-| **FR-2** SLO Recommendations | Planned | Compute dependency-aware availability + latency SLOs |
-| **FR-3** Composite SLOs | Planned | Aggregate SLOs across service chains |
-| **FR-4** Impact Analysis | Planned | Upstream impact traversal for degraded services |
+| **FR-2** SLO Recommendations | Production Ready | Compute dependency-aware availability + latency SLOs |
+| **FR-3** Composite SLOs | Production Ready | Aggregate SLOs across service chains |
+| **FR-4** Impact Analysis | Demo Scope Implemented | Upstream impact traversal for degraded services |
 
 ## Documentation
 
