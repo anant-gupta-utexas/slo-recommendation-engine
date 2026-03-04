@@ -288,10 +288,22 @@ Main merge → Push to GHCR → Deploy to Staging → Smoke Tests
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **FR-1** Service Dependency Graph | Production Ready | Ingest, store, query, manage dependency graphs |
-| **FR-2** SLO Recommendations | Production Ready | Compute dependency-aware availability + latency SLOs |
-| **FR-3** Composite SLOs | Production Ready | Aggregate SLOs across service chains |
-| **FR-4** Impact Analysis | Demo Scope Implemented | Upstream impact traversal for degraded services |
+| **FR-1** Service Dependency Graph | Production Ready | Ingest, store, query, and manage directed dependency graphs with circular dependency detection |
+| **FR-2** SLO Recommendations | Production Ready | Compute dependency-aware availability + latency SLOs with three tiers (Conservative / Balanced / Aggressive) |
+| **FR-3** Constraint Propagation | Production Ready | Model serial/parallel dependency chains, flag mathematically unachievable SLOs, identify external API budget drain |
+| **FR-4** Impact Analysis | Demo Scaffolding | Upstream impact traversal for proposed SLO changes — minimum implementation for demo purposes |
+| **FR-5** Recommendation Lifecycle | Demo Scaffolding | Accept / modify / reject workflow with audit trail — minimum implementation for demo purposes |
+| **FR-6** Telemetry Ingestion Pipeline | Not Started | Ingest RED/USE metrics from Prometheus (PromQL remote read) and OpenTelemetry (OTLP); tiered data retention |
+| **FR-7** Explainability | Demo Scaffolding | SHAP-based feature attribution, counterfactual analysis, data source disclosure — minimum implementation for demo purposes |
+| **FR-8** REST API for Platform Integration | Production Ready | OpenAPI 3.0 spec, authentication, rate limiting — designed for Backstage integration |
+| **FR-9** Drift Detection & Re-evaluation | Not Started | Page-Hinkley + ADWIN + KS-test ensemble; automatic SLO re-evaluation on baseline drift |
+| **FR-10** Burn-Rate Alert Configuration | Not Started | Generate multi-window, multi-burn-rate Prometheus alert rules (Sloth/Pyrra compatible) |
+| **FR-11** Auto-Approval Rules | Not Started | Policy engine for automatic SLO acceptance for low-criticality services with configurable confidence thresholds |
+| **FR-12** Organizational Dashboard | Not Started | SLO coverage, error budget health, acceptance rates, dependency risk map across teams |
+| **FR-13** Chaos Engineering Integration | Not Started | Validate SLOs via LitmusChaos/Chaos Mesh fault injection experiments |
+| **FR-14** SLO-as-Code Export | Not Started | Export accepted SLOs as OpenSLO YAML; Sloth-compatible Prometheus recording rules; GitOps PR workflow |
+| **FR-15** Composite / Journey-Level SLOs | Not Started | Aggregate multi-service SLOs into user-journey SLOs with Monte Carlo simulation for complex topologies |
+| **FR-16** What-If Scenario Modeling | Not Started | Interactive modeling of architectural changes (fallback providers, circuit breakers, caching) on achievable SLOs |
 
 ## Documentation
 
