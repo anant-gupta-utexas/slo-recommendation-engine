@@ -297,7 +297,6 @@ Main merge → Push to GHCR → Deploy to Staging → Smoke Tests
 
 | Document | Description |
 |----------|-------------|
-| [Getting Started](docs/3_guides/getting_started.md) | Developer setup, environment config, first API calls |
 | [Dependency Graph Guide](docs/3_guides/dependency_graph_guide.md) | Complete FR-1 developer guide with API reference |
 | [Core Concepts](docs/3_guides/core_concepts.md) | Clean Architecture patterns and conventions |
 | [System Design](docs/2_architecture/system_design.md) | High-level architecture with diagrams |

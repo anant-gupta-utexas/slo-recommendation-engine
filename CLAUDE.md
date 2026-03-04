@@ -39,7 +39,7 @@ ruff check . && ruff format --check . && mypy src/ --strict
 docs/
 ├── 1_product/      # "Why": Product Requirements (PRD.md), research
 ├── 2_architecture/ # "High-Level How": System Design (system_design.md), TRD
-├── 3_guides/       # "How-to": getting_started.md, core_concepts.md, dependency_graph_guide.md, slo_recommendations_guide.md, constraint_propagation_guide.md
+├── 3_guides/       # "How-to": core_concepts.md, dependency_graph_guide.md, slo_recommendations_guide.md, constraint_propagation_guide.md
 └── 4_testing/      # "Quality": Testing strategy, examples, coverage goals (index.md)
 ```
 

@@ -881,7 +881,6 @@ If Prometheus is not configured, the OTel ingestion task will log a warning but 
 | Technical Requirements | `docs/2_architecture/TRD.md` |
 | System Design | `docs/2_architecture/system_design.md` |
 | Core Concepts (Clean Architecture) | `docs/3_guides/core_concepts.md` |
-| Getting Started | `docs/3_guides/getting_started.md` |
 | Testing Guide | `docs/4_testing/index.md` |
 | FR-1 Development Plan | `dev/active/fr1-dependency-graph/fr1-plan.md` |
 | FR-1 Task Checklist | `dev/active/fr1-dependency-graph/fr1-tasks.md` |
