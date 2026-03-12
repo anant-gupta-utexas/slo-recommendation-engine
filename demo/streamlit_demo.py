@@ -29,8 +29,8 @@ STEPS = [
     "2. Query Subgraph",
     "3. SLO Recommendations",
     "4. Accept SLO",
-    "5. Modify SLO",
-    "6. Impact Analysis",
+    "5. Impact Analysis",
+    "6. Modify SLO",
     "7. Audit History",
     "Concepts & Reference",
 ]
@@ -944,7 +944,7 @@ def render_step_4():
 
 
 def render_step_5():
-    st.header("Step 5: Modify SLO")
+    st.header("Step 6: Modify SLO")
     st.caption("POST /api/v1/services/{service_id}/slos (action=modify)")
     render_step_concepts(5)
 
@@ -1032,7 +1032,7 @@ def render_step_5():
 
 
 def render_step_6():
-    st.header("Step 6: Impact Analysis")
+    st.header("Step 5: Impact Analysis")
     st.caption("POST /api/v1/slos/impact-analysis")
     render_step_concepts(6)
 
@@ -1240,8 +1240,8 @@ def main():
         2: render_step_2,
         3: render_step_3,
         4: render_step_4,
-        5: render_step_5,
-        6: render_step_6,
+        5: render_step_6,
+        6: render_step_5,
         7: render_step_7,
         8: render_reference_page,
     }

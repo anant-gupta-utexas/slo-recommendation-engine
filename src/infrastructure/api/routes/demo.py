@@ -295,27 +295,30 @@ def _generate_demo_availability_recommendation(
         tiers={
             "conservative": TierApiModel(
                 level="conservative",
-                target=99.9,
-                error_budget_monthly_minutes=43.2,
-                confidence_interval=(99.85, 99.95),
+                # Well below the 99.40% composite ceiling — largest error budget, safest target
+                target=99.0,
+                error_budget_monthly_minutes=432.0,
+                confidence_interval=(98.85, 99.15),
                 estimated_breach_probability=0.02,
                 percentile=None,
                 target_ms=None,
             ),
             "balanced": TierApiModel(
                 level="balanced",
-                target=99.95,
-                error_budget_monthly_minutes=21.6,
-                confidence_interval=(99.93, 99.97),
+                # Mid-range below ceiling
+                target=99.2,
+                error_budget_monthly_minutes=259.2,
+                confidence_interval=(99.05, 99.35),
                 estimated_breach_probability=0.08,
                 percentile=None,
                 target_ms=None,
             ),
             "aggressive": TierApiModel(
                 level="aggressive",
-                target=99.99,
-                error_budget_monthly_minutes=4.32,
-                confidence_interval=(99.985, 99.995),
+                # Close to but below the 99.40% composite ceiling
+                target=99.35,
+                error_budget_monthly_minutes=136.8,
+                confidence_interval=(99.25, 99.40),
                 estimated_breach_probability=0.15,
                 percentile=None,
                 target_ms=None,
@@ -323,16 +326,17 @@ def _generate_demo_availability_recommendation(
         },
         explanation=ExplanationApiModel(
             summary=(
-                f"Availability recommendation for {service_id} is based on synthetic demo data. "
-                f"Conservative tier (99.9%) is the safest target with the largest error budget. "
-                f"Balanced tier (99.95%) offers good reliability with reasonable operational flexibility. "
-                f"Aggressive tier (99.99%) targets highest reliability but has the tightest error budget."
+                f"Availability recommendation for {service_id} is constrained by its dependency graph. "
+                f"Hard dependencies cap the theoretical ceiling at 99.40% (R_payment × R_auth = 0.9950 × 0.9990). "
+                f"Conservative tier (99.0%) provides the largest error budget with the most operational headroom. "
+                f"Balanced tier (99.2%) offers good reliability while staying well below the dependency ceiling. "
+                f"Aggressive tier (99.35%) approaches the ceiling but leaves a small safety margin."
             ),
             feature_attribution=[
                 FeatureAttributionApiModel(
                     feature="historical_uptime",
                     contribution=0.45,
-                    description="Service has demonstrated 99.92% uptime over past 30 days",
+                    description="Service has demonstrated 99.15% uptime over past 30 days",
                 ),
                 FeatureAttributionApiModel(
                     feature="traffic_volume",
@@ -342,7 +346,7 @@ def _generate_demo_availability_recommendation(
                 FeatureAttributionApiModel(
                     feature="dependency_stability",
                     contribution=0.20,
-                    description="All hard dependencies have active SLOs ≥99.9%",
+                    description="Hard dependencies cap composite availability at 99.40%",
                 ),
                 FeatureAttributionApiModel(
                     feature="deployment_frequency",
@@ -362,14 +366,14 @@ def _generate_demo_availability_recommendation(
                 CounterfactualApiModel(
                     condition="If auth-service SLO increased from 99.9% to 99.95%",
                     # 0.9950 × 0.9995 = 0.9945 → 99.45%
-                    result="Composite availability bound would improve to 99.45%, enabling a tighter SLO target",
+                    result="Composite availability bound would improve to 99.45%, unlocking a tighter aggressive tier target",
                     feature="dependency_stability",
                     original_value=99.40,
                     perturbed_value=99.45,
                 ),
                 CounterfactualApiModel(
                     condition="If deployment frequency doubled to 2x/week",
-                    result="Recommended tier would shift to 'conservative' (99.99%) due to increased change risk",
+                    result="Recommended tier would shift to 'conservative' (99.0%) due to increased change risk",
                     feature="deployment_frequency",
                     original_value=1.0,
                     perturbed_value=2.0,
